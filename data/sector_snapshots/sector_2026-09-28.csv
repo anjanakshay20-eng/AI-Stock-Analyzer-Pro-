@@ -1,0 +1,55 @@
+Sector,Stocks,Avg AI Score,Avg Fundamental,Avg Technical,Avg Sector-Rel,Avg Rank Composite,Buy+,Avg PE,Avg Upside %
+Mining - Coal,1,76.0,87.5,49.6,100.0,62.6,0,8.4,6.4
+Ports,1,68.0,78.1,56.0,100.0,55.5,0,32.1,6.7
+Airlines,1,66.0,67.9,42.6,100.0,50.0,0,-79.1,4.4
+Oil & Gas - Exploration & Production,1,66.0,84.4,44.6,100.0,56.9,0,7.3,3.6
+Private Banks,4,66.0,75.0,43.0,62.5,47.1,0,16.8,3.8
+Telecom Services,1,66.0,71.4,28.6,100.0,53.7,0,42.0,3.4
+"Hotels, Resorts & Cruise Lines",1,65.0,66.7,57.0,100.0,50.7,0,49.8,2.7
+Soft Drinks,1,65.0,78.1,44.6,100.0,50.0,0,48.0,11.4
+Commodity Chemicals,1,64.0,71.9,45.2,100.0,65.1,0,105.1,7.2
+Public Banks,5,63.8,88.8,44.6,60.0,49.9,0,7.5,4.3
+Electronic Equipments,1,63.0,75.0,36.0,100.0,56.1,0,47.3,3.7
+Gas Distribution,1,63.0,62.5,57.0,100.0,48.5,0,15.1,7.3
+Metals - Aluminium,1,63.0,81.2,41.0,100.0,55.7,0,16.4,4.6
+Real Estate,2,61.5,73.4,45.3,75.0,55.4,0,35.7,8.5
+Online Services,1,61.0,45.8,68.0,100.0,46.1,0,843.8,6.3
+Power Transmission & Distribution,2,61.0,65.6,44.3,75.0,44.0,0,23.3,5.4
+Retail - Apparel,1,61.0,71.4,29.6,100.0,56.9,0,83.7,4.8
+Commodities Trading,1,60.0,78.1,27.0,100.0,50.0,0,44.6,5.3
+Construction & Engineering,1,60.0,59.4,36.6,100.0,47.1,0,33.0,3.5
+Labs & Life Sciences Services,1,60.0,34.4,54.0,100.0,61.6,0,99.3,10.2
+Renewable Energy,1,60.0,59.4,43.0,100.0,48.9,0,127.6,6.7
+Oil & Gas - Refining & Marketing,3,59.7,75.0,35.8,66.7,53.3,0,10.1,3.8
+Asset Management,2,59.5,74.4,42.8,77.7,50.0,0,24.2,3.3
+Two Wheelers,2,59.5,68.8,45.9,75.0,59.4,0,46.9,4.0
+Aerospace & Defense Equipments,1,58.0,71.9,52.0,100.0,50.0,0,35.0,4.1
+FMCG - Tobacco,1,58.0,59.4,39.2,100.0,48.7,0,16.2,3.4
+Consumer Finance,6,57.0,77.7,40.6,57.7,47.3,0,36.5,5.0
+Mining - Diversified,1,56.0,65.6,35.0,100.0,68.3,0,17.9,5.4
+Power Generation,3,56.0,70.8,33.2,67.6,46.8,0,48.6,5.4
+Shipbuilding,1,56.0,78.1,31.6,100.0,50.0,0,34.4,5.4
+Hospitals & Diagnostic Centres,2,55.0,63.2,52.8,76.5,46.3,0,68.2,3.7
+Power Infrastructure,1,55.0,46.9,28.2,100.0,52.4,0,71.8,6.8
+"Precious Metals, Jewellery & Watches",1,55.0,71.9,48.2,100.0,58.3,0,84.5,3.4
+Heavy Electrical Equipments,2,54.5,43.4,40.1,80.0,55.6,0,103.2,5.0
+Conglomerates,1,54.0,37.5,44.6,100.0,50.0,0,49.7,4.8
+Retail - Department Stores,1,54.0,53.1,38.6,100.0,43.7,0,83.2,3.7
+Auto Parts,2,53.0,65.6,46.3,75.0,58.3,0,47.6,4.3
+Industrial Machinery,1,53.0,75.0,42.2,100.0,60.2,0,58.4,4.6
+Specialized Finance,3,53.0,78.1,46.0,66.7,34.4,0,8.1,4.0
+Trucks & Buses,2,53.0,59.4,37.8,77.7,52.1,0,44.8,4.7
+Cement,4,52.8,48.4,44.2,62.5,43.1,0,37.4,3.4
+Insurance,3,52.7,50.0,42.9,66.7,47.8,0,53.3,5.4
+Four Wheelers,4,52.5,81.6,38.6,65.7,50.5,0,19.7,4.9
+Metals - Diversified,1,52.0,65.6,40.0,100.0,70.2,0,6.0,5.4
+IT Services & Consulting,6,51.2,52.1,42.0,58.3,44.9,0,19.5,5.1
+Pharmaceuticals,5,51.2,61.2,62.8,60.0,48.4,0,40.3,7.9
+Alcoholic Beverages,1,50.0,59.4,50.6,100.0,45.7,0,56.3,3.8
+Diversified Chemicals,1,50.0,59.4,42.6,100.0,56.2,0,63.3,4.3
+FMCG - Household Products,1,48.0,53.1,51.2,100.0,44.2,0,30.2,3.4
+Paints,1,48.0,43.8,58.0,100.0,50.8,0,53.0,3.6
+Iron & Steel,3,46.7,61.5,44.2,66.7,48.8,0,23.6,5.1
+Tea & Coffee,1,45.0,50.0,37.6,100.0,40.0,0,63.3,3.7
+FMCG - Foods,2,44.5,45.9,43.1,77.7,47.5,0,60.5,3.7
+FMCG - Personal Products,1,43.0,40.6,37.6,100.0,35.4,0,48.1,4.0
