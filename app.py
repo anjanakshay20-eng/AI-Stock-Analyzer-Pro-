@@ -1511,7 +1511,7 @@ def render_kpi_row(scored):
     top_ai = scored.sort_values("AI_Score", ascending=False).head(15)
     if not top_ai.empty: render_horizontal_scroll(top_ai, "⭐ Top AI-Rated Stocks", 15)
 
-    def render_screener_tab(scored, registry, project_dir):
+def render_screener_tab(scored, registry, project_dir):
     with st.expander("🔎 Filters", expanded=False):
         c1, c2 = st.columns(2)
         ms = c1.slider("Min AI Score", 0, 100, 0, 5)
