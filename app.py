@@ -1,4 +1,4 @@
-"""AI Stock Analyzer Pro — v7 Complete."""
+"""AI Stock Analyzer Pro — v8 Complete."""
 
 from __future__ import annotations
 import concurrent.futures, io, json, logging
@@ -57,12 +57,15 @@ TAB_META = {
 DEFAULT_TAB_ORDER = ["screener", "dcf", "deep", "hybrid", "trade",
                      "peers", "indices", "patterns", "quality"]
 
+# ⭐ CHANGE 2 + 3 + 4: Added SMA 100, EMA 100, Pivot Points; changed 52W colors to yellow
 CHART_OVERLAYS = {
     "SMA 20":  {"color": "#fbbf24", "kind": "sma", "window": 20,  "col": "20 DMA"},
     "SMA 50":  {"color": "#60a5fa", "kind": "sma", "window": 50,  "col": "50 DMA"},
+    "SMA 100": {"color": "#22d3ee", "kind": "sma", "window": 100, "col": "100 DMA"},
     "SMA 200": {"color": "#a78bfa", "kind": "sma", "window": 200, "col": "200 DMA"},
     "EMA 20":  {"color": "#f97316", "kind": "ema", "window": 20,  "col": "EMA20"},
     "EMA 50":  {"color": "#06b6d4", "kind": "ema", "window": 50,  "col": "EMA50"},
+    "EMA 100": {"color": "#f472b6", "kind": "ema", "window": 100, "col": "EMA100"},
     "EMA 200": {"color": "#ec4899", "kind": "ema", "window": 200, "col": "EMA200"},
     "BB Upper": {"color": "rgba(139,163,192,0.7)", "kind": "bb_upper", "window": 20, "col": "Upper Band"},
     "BB Middle": {"color": "rgba(139,163,192,0.45)", "kind": "bb_middle", "window": 20, "col": "Middle Band"},
@@ -70,9 +73,10 @@ CHART_OVERLAYS = {
     "SuperTrend": {"color": "#10b981", "kind": "supertrend", "col": "SuperTrend_Val"},
     "VWAP": {"color": "#f59e0b", "kind": "vwap"},
     "PSAR": {"color": "#8b5cf6", "kind": "psar"},
-    "52W High": {"color": "#ef4444", "kind": "52w_high", "col": "52W High"},
-    "52W Low":  {"color": "#10b981", "kind": "52w_low",  "col": "52W Low"},
+    "52W High": {"color": "#fbbf24", "kind": "52w_high", "col": "52W High"},
+    "52W Low":  {"color": "#fbbf24", "kind": "52w_low",  "col": "52W Low"},
     "Fibonacci": {"color": "#a78bfa", "kind": "fibonacci"},
+    "Fib Pivots": {"color": "#f59e0b", "kind": "fib_pivots"},
 }
 CHART_SUBPLOTS = ["Volume", "RSI", "MACD", "Stochastic", "ADX", "ATR", "OBV"]
 
@@ -452,8 +456,9 @@ def _compute_indicators(data):
     close, high, low, volume = data["Close"], data["High"], data["Low"], data["Volume"]
     if len(data) < 200 or not np.isfinite(close.iloc[-1]) or close.iloc[-1] <= 0:
         return {"Technical_Score": 50.0}
-    sma = {n: close.rolling(n).mean() for n in (20, 50, 200)}
-    ema = {n: close.ewm(span=n, adjust=False).mean() for n in (20, 50, 200)}
+    # ⭐ CHANGE 2: Added SMA 100 and EMA 100
+    sma = {n: close.rolling(n).mean() for n in (20, 50, 100, 200)}
+    ema = {n: close.ewm(span=n, adjust=False).mean() for n in (20, 50, 100, 200)}
     delta = close.diff()
     gain = delta.clip(lower=0).ewm(alpha=1/14, min_periods=14, adjust=False).mean()
     loss = (-delta.clip(upper=0)).ewm(alpha=1/14, min_periods=14, adjust=False).mean()
@@ -510,10 +515,12 @@ def _compute_indicators(data):
     vol_s = 100 if ap <= 1.5 else 70 if ap <= 2.5 else 40 if ap <= 4 else 10
     sr_s = 100 if cmp > pivot else 40
     tech = (ts + ms_val + vs + vol_s + sr_s) / 5
+    # ⭐ CHANGE 2: Added 100 DMA and EMA100
     return {"CMP": cmp, "20 DMA": float(sma[20].iloc[-1]), "50 DMA": float(sma[50].iloc[-1]),
-        "200 DMA": float(sma[200].iloc[-1]), "RSI": float(rsi_v),
-        "EMA20": float(ema[20].iloc[-1]), "EMA50": float(ema[50].iloc[-1]),
-        "EMA200": float(ema[200].iloc[-1]), "MACDSignal": float(ms.iloc[-1]),
+        "100 DMA": float(sma[100].iloc[-1]), "200 DMA": float(sma[200].iloc[-1]),
+        "RSI": float(rsi_v), "EMA20": float(ema[20].iloc[-1]), "EMA50": float(ema[50].iloc[-1]),
+        "EMA100": float(ema[100].iloc[-1]), "EMA200": float(ema[200].iloc[-1]),
+        "MACDSignal": float(ms.iloc[-1]),
         "Histogram": float(mh.iloc[-1]), "Upper Band": float(up.iloc[-1]),
         "Middle Band": float(mid.iloc[-1]), "Lower Band": float(lo.iloc[-1]),
         "ATR": atr_v, "DI Plus": float(pdi.iloc[-1]), "DI Minus": float(mdi.iloc[-1]),
@@ -913,7 +920,7 @@ def _compute_overlay_series(h, kind, window=None):
     if kind == "52w_low":
         l52 = float(low.tail(252).min()) if len(low) >= 252 else float(low.min())
         return pd.Series(l52, index=h.index)
-    if kind == "fibonacci":
+    if kind in ("fibonacci", "fib_pivots"):
         return None
     return None
 
@@ -931,6 +938,25 @@ def _compute_fibonacci_levels(h):
         "61.8%":        hi - 0.618 * diff,
         "78.6%":        hi - 0.786 * diff,
         "100.0% (Low)": lo,
+    }
+
+# ⭐ CHANGE 4: Fibonacci Pivot Points
+def _compute_fib_pivots(h):
+    """Fibonacci Pivot Points using last completed bar's H/L/C."""
+    high = h["High"]; low = h["Low"]; close = h["Close"]
+    if len(h) < 2: return {}
+    H = float(high.iloc[-2]); L = float(low.iloc[-2]); C = float(close.iloc[-2])
+    if H <= L: return {}
+    diff = H - L
+    P = (H + L + C) / 3
+    return {
+        "R3": P + 1.000 * diff,
+        "R2": P + 0.618 * diff,
+        "R1": P + 0.382 * diff,
+        "P":  P,
+        "S1": P - 0.382 * diff,
+        "S2": P - 0.618 * diff,
+        "S3": P - 1.000 * diff,
     }
 
 def _build_subplot_trace(h, kind):
@@ -985,6 +1011,9 @@ def render_price_chart(ticker, row=None):
     show_key = f"chart_show_settings_{ticker}"
     if show_key not in st.session_state:
         st.session_state[show_key] = True
+    leg_key = f"chart_show_legend_{ticker}"
+    if leg_key not in st.session_state:
+        st.session_state[leg_key] = False  # ⭐ CHANGE 1: Legend hidden by default
 
     if st.session_state[show_key]:
         with st.expander("⚙️ Chart Settings", expanded=True):
@@ -1019,16 +1048,23 @@ def render_price_chart(ticker, row=None):
                 st.session_state[show_key] = False
                 st.rerun()
     else:
-        ec1, ec2 = st.columns([3, 1])
+        ec1, ec2, ec3 = st.columns([2, 1, 1])
         with ec1:
             period_now = st.session_state.get(f"chart_period_{ticker}", "1Y")
-            st.caption(f"📊 {period_now} • Click ⚙️ to change")
+            st.caption(f"📊 {period_now}")
         with ec2:
-            if st.button("⚙️ Edit", key=f"edit_{ticker}", use_container_width=True):
-                st.session_state[show_key] = True
-                st.rerun()
+            if st.button("⚙️ Settings", key=f"edit_{ticker}", use_container_width=True):
+                st.session_state[show_key] = True; st.rerun()
+        with ec3:
+            # ⭐ CHANGE 1: Legend toggle button
+            show_leg = st.session_state.get(leg_key, False)
+            lbl = "📖 Hide" if show_leg else "📖 Legend"
+            if st.button(lbl, key=f"leg_{ticker}", use_container_width=True):
+                st.session_state[leg_key] = not show_leg; st.rerun()
         selected_ovl = st.session_state.get(f"ovl_{ticker}", ["SMA 20", "SMA 50", "SMA 200"])
         selected_sub = st.session_state.get(f"sub_{ticker}", ["Volume", "RSI"])
+
+    show_legend = st.session_state.get(leg_key, False)
 
     period_map = {
         "1D": ("1d", "5m"), "1W": ("5d", "30m"), "1M": ("1mo", "1d"),
@@ -1054,9 +1090,13 @@ def render_price_chart(ticker, row=None):
         low=h["Low"], close=h["Close"], name=ticker,
         increasing_line_color="#34d399", decreasing_line_color="#fb7185"), row=1, col=1)
 
+    close_series = h["Close"]
+
     for ov_name in selected_ovl:
         meta = CHART_OVERLAYS[ov_name]
         kind = meta["kind"]
+
+        # Fibonacci retracement
         if kind == "fibonacci":
             fib_levels = _compute_fibonacci_levels(h)
             palette = ["#ef4444", "#f59e0b", "#fbbf24", "#34d399", "#10b981",
@@ -1069,6 +1109,24 @@ def render_price_chart(ticker, row=None):
                     hovertemplate=f"Fib {lbl}: ₹{price:,.2f}<extra></extra>",
                 ), row=1, col=1)
             continue
+
+        # ⭐ CHANGE 4: Fibonacci Pivot Points (P, R1-R3, S1-S3)
+        if kind == "fib_pivots":
+            pivots = _compute_fib_pivots(h)
+            color_map = {
+                "R3": "#ef4444", "R2": "#f97316", "R1": "#fb923c",
+                "P":  "#fbbf24",
+                "S1": "#84cc16", "S2": "#22c55e", "S3": "#10b981",
+            }
+            for lbl, price in pivots.items():
+                fig.add_trace(go.Scatter(
+                    x=[h.index[0], h.index[-1]], y=[price, price],
+                    mode="lines", name=f"{lbl}: ₹{price:,.2f}",
+                    line=dict(color=color_map.get(lbl, "#8ba3c0"), width=1.5, dash="dash"),
+                    hovertemplate=f"{lbl}: ₹{price:,.2f}<extra></extra>",
+                ), row=1, col=1)
+            continue
+
         line = _compute_overlay_series(h, kind, meta.get("window"))
         if line is None: continue
         display_val = None
@@ -1079,11 +1137,31 @@ def render_price_chart(ticker, row=None):
             display_val = float(line.dropna().iloc[-1])
         legend_name = (f"{ov_name}: ₹{display_val:,.2f}"
                        if display_val is not None else ov_name)
+
+        # ⭐ CHANGE 3: SuperTrend dynamic colors (green=buy, red=sell)
+        if kind == "supertrend":
+            uptrend = line.where(line < close_series)
+            downtrend = line.where(line >= close_series)
+            fig.add_trace(go.Scatter(
+                x=h.index, y=uptrend, mode="lines",
+                name=f"{legend_name} (BUY)",
+                line=dict(color="#10b981", width=2.2),
+                connectgaps=False,
+            ), row=1, col=1)
+            fig.add_trace(go.Scatter(
+                x=h.index, y=downtrend, mode="lines",
+                name="",
+                line=dict(color="#ef4444", width=2.2),
+                showlegend=False, connectgaps=False,
+            ), row=1, col=1)
+            continue
+
+        # ⭐ CHANGE 3: 52W High/Low both yellow
         if kind in ("52w_high", "52w_low"):
             fig.add_trace(go.Scatter(
                 x=[h.index[0], h.index[-1]], y=[display_val, display_val],
                 mode="lines", name=legend_name,
-                line=dict(color=meta["color"], width=1.5, dash="dash"),
+                line=dict(color="#fbbf24", width=1.5, dash="dash"),
                 hovertemplate=f"{ov_name}: ₹{display_val:,.2f}<extra></extra>",
             ), row=1, col=1)
         elif kind == "psar":
@@ -1099,17 +1177,25 @@ def render_price_chart(ticker, row=None):
         for tr in _build_subplot_trace(h, sp_name):
             fig.add_trace(tr, row=i, col=1)
 
-    fig.update_layout(
-        xaxis_rangeslider_visible=False,
-        title=f"{ticker} — {selected} Price Action",
-        legend=dict(
+    # ⭐ CHANGE 1: Legend visibility controlled by toggle
+    if show_legend:
+        legend_cfg = dict(
             orientation="v", yanchor="top", y=0.99,
             xanchor="left", x=0.01,
             font=dict(size=12, color="#e5eefb", family="sans-serif"),
-            bgcolor="rgba(7,13,24,0.85)",
-            bordercolor="rgba(96,165,250,0.3)", borderwidth=1,
-        ),
-        margin=dict(t=60, b=30, l=20, r=20),
+            bgcolor="rgba(7,13,24,0.9)",
+            bordercolor="rgba(96,165,250,0.4)", borderwidth=1,
+        )
+    else:
+        legend_cfg = dict(orientation="h", y=1.01, x=1, xanchor="right",
+                          font=dict(size=1), bgcolor="rgba(0,0,0,0)")
+
+    fig.update_layout(
+        xaxis_rangeslider_visible=False,
+        title=f"{ticker} — {selected} Price Action",
+        legend=legend_cfg,
+        showlegend=show_legend,
+        margin=dict(t=50, b=30, l=20, r=20),
         dragmode="pan",
     )
     fig.update_xaxes(gridcolor="#1c2e45", zerolinecolor="#1c2e45")
@@ -1152,6 +1238,7 @@ def _gauge_chart(value, title):
         font={"color": "#8ba3c0"}, height=250, margin={"t": 55, "b": 10, "l": 20, "r": 20})
     return fig
 
+# ⭐ CHANGE 2: Added 100 DMA and EMA100 to detailed indicators
 def render_technical_analysis(row):
     st.markdown("### 📊 Technical Analysis")
     def _safe(v):
@@ -1188,8 +1275,9 @@ def render_technical_analysis(row):
         "ADX": row.get("ADX"), "ATR": row.get("ATR"),
         "MACD Signal": row.get("MACDSignal"), "Histogram": row.get("Histogram"),
         "20 DMA": row.get("20 DMA"), "50 DMA": row.get("50 DMA"),
-        "200 DMA": row.get("200 DMA"), "EMA20": row.get("EMA20"),
-        "EMA50": row.get("EMA50"), "EMA200": row.get("EMA200"),
+        "100 DMA": row.get("100 DMA"), "200 DMA": row.get("200 DMA"),
+        "EMA20": row.get("EMA20"), "EMA50": row.get("EMA50"),
+        "EMA100": row.get("EMA100"), "EMA200": row.get("EMA200"),
         "Upper Band": row.get("Upper Band"), "Middle Band": row.get("Middle Band"),
         "Lower Band": row.get("Lower Band"),
         "DI Plus": row.get("DI Plus"), "DI Minus": row.get("DI Minus"),
@@ -1331,13 +1419,12 @@ def inject_mobile_css():
         .block-container { padding-left: 0.65rem !important; padding-right: 0.65rem !important;
             padding-top: 0.5rem !important; padding-bottom: 5rem !important; }
         h1 { font-size: 1.2rem !important; margin-bottom: 0.2rem !important; }
-        h2 { font-size: 1.05rem !important; margin-bottom: 0.3rem !important; margin-top: 0.5rem !important; }
-        h3 { font-size: 0.95rem !important; margin-bottom: 0.3rem !important; margin-top: 0.5rem !important; }
+        h2 { font-size: 1.05rem !important; }
+        h3 { font-size: 0.95rem !important; }
         .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0 16px 0; }
         .kpi-card { padding: 12px 14px; }
         .kpi-card .kpi-label { font-size: 0.65rem; }
         .kpi-card .kpi-value { font-size: 1.5rem; }
-        .kpi-card .kpi-delta { font-size: 0.7rem; }
         .stock-scroll .stock-card { min-width: 230px !important; max-width: 230px !important;
             flex: 0 0 230px !important; }
         div[data-baseweb="select"] [data-baseweb="tag"] {
@@ -1347,9 +1434,6 @@ def inject_mobile_css():
             border-radius: 8px !important; padding: 6px 10px !important; }
         div[data-baseweb="select"] [data-baseweb="tag"] span {
             font-size: 0.85rem !important; font-weight: 600 !important; color: #e5eefb !important; }
-        .js-plotly-plot .legendtext, .js-plotly-plot .legend text {
-            font-size: 13px !important; font-weight: 700 !important; }
-        .js-plotly-plot .annotation-text { font-size: 12px !important; }
         div[role="radiogroup"] { display: flex !important; flex-wrap: wrap !important; gap: 6px !important; }
         div[role="radiogroup"] label {
             flex: 0 0 auto !important; padding: 8px 14px !important;
@@ -1378,7 +1462,6 @@ def inject_mobile_css():
         div[data-testid="stExpander"] { border-radius: 12px !important;
             border: 1px solid rgba(139,163,192,0.15) !important; }
         div[data-testid="stAlert"] { font-size: 0.78rem !important; padding: 8px 10px !important; }
-        .js-plotly-plot .legend { font-size: 11px !important; }
     }
     @media (max-width: 380px) {
         h1 { font-size: 1.1rem !important; }
@@ -1510,7 +1593,6 @@ def render_kpi_row(scored):
     if not entry_df.empty: render_horizontal_scroll(entry_df, "🎯 Top Entry Opportunities", 15)
     top_ai = scored.sort_values("AI_Score", ascending=False).head(15)
     if not top_ai.empty: render_horizontal_scroll(top_ai, "⭐ Top AI-Rated Stocks", 15)
-
 def render_screener_tab(scored, registry, project_dir):
     with st.expander("🔎 Filters", expanded=False):
         c1, c2 = st.columns(2)
@@ -1985,4 +2067,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main()        
