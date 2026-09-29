@@ -1,6 +1,7 @@
-"""AI Stock Analyzer Pro — Bulletproof Mobile Native Edition.
+"""AI Stock Analyzer Pro — TradingView-Style Native Mobile UI.
 
-Custom HTML KPI grid + Tab-based layouts for native app feel on mobile.
+10-dimension AI Score + Hybrid DCF + Entry/Exit Triggers.
+Features card-based UI with horizontal scrolling, colored borders, and native app feel.
 """
 
 from __future__ import annotations
@@ -938,21 +939,21 @@ def style_valuation(v):
 def fmt_money(v):
     return f"₹{v:,.2f}" if pd.notna(v) and v > 0 else "—"
 
-# ============= BULLETPROOF MOBILE CSS =============
+# ============= BULLETPROOF TRADINGVIEW-STYLE CSS =============
 def inject_mobile_css():
-    """Custom HTML KPI grid + bulletproof mobile CSS."""
+    """TradingView-style native mobile UI."""
     st.markdown("""
     <style>
     html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
     .block-container {
         padding-top: 1rem !important;
-        padding-bottom: 2rem !important;
+        padding-bottom: 5rem !important;
         max-width: 100% !important;
     }
     body, .main, section.main { overflow-x: hidden !important; }
     footer { display: none !important; }
 
-    /* KPI GRID */
+    /* ============ KPI GRID ============ */
     .kpi-grid {
         display: grid;
         grid-template-columns: repeat(6, 1fr);
@@ -960,58 +961,240 @@ def inject_mobile_css():
         margin: 12px 0 20px 0;
     }
     .kpi-card {
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(139, 163, 192, 0.15);
-        border-radius: 12px;
+        background: linear-gradient(145deg, #0f1729 0%, #0a1120 100%);
+        border: 1px solid rgba(139, 163, 192, 0.12);
+        border-radius: 14px;
         padding: 14px 16px;
+        position: relative;
+        overflow: hidden;
         transition: all 0.2s ease;
     }
+    .kpi-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #60a5fa, #a78bfa);
+    }
+    .kpi-card.kpi-green::before { background: linear-gradient(90deg, #34d399, #10b981); }
+    .kpi-card.kpi-red::before { background: linear-gradient(90deg, #fb7185, #ef4444); }
+    .kpi-card.kpi-amber::before { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
     .kpi-card:hover {
-        background: rgba(96, 165, 250, 0.06);
-        border-color: rgba(96, 165, 250, 0.4);
         transform: translateY(-2px);
+        border-color: rgba(96, 165, 250, 0.4);
+        box-shadow: 0 8px 24px rgba(96, 165, 250, 0.1);
     }
     .kpi-card .kpi-label {
         color: #8ba3c0;
-        font-size: 0.78rem;
+        font-size: 0.72rem;
         font-weight: 500;
         margin-bottom: 6px;
-        opacity: 0.85;
+        opacity: 0.8;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
     }
     .kpi-card .kpi-value {
         color: #e5eefb;
-        font-size: 1.7rem;
+        font-size: 1.75rem;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.02em;
+    }
+    .kpi-card .kpi-delta {
+        font-size: 0.7rem;
+        margin-top: 4px;
+        font-weight: 600;
+    }
+    .kpi-card .kpi-delta.up { color: #34d399; }
+    .kpi-card .kpi-delta.down { color: #fb7185; }
+    .kpi-card .kpi-delta.neutral { color: #fbbf24; }
+
+    /* ============ STOCK CARDS ============ */
+    .stock-card {
+        background: linear-gradient(145deg, #0d1424 0%, #0a0f1c 100%);
+        border: 1px solid rgba(139, 163, 192, 0.12);
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 10px;
+        position: relative;
+        overflow: hidden;
+        transition: all 0.2s ease;
+    }
+    .stock-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+    .stock-card::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 4px;
+    }
+    .stock-card.signal-strong-buy::before { background: #10b981; }
+    .stock-card.signal-buy::before { background: #34d399; }
+    .stock-card.signal-accumulate::before { background: #84cc16; }
+    .stock-card.signal-hold::before { background: #fbbf24; }
+    .stock-card.signal-reduce::before { background: #fb923c; }
+    .stock-card.signal-sell::before { background: #fb7185; }
+
+    .stock-card .stock-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 8px;
+    }
+    .stock-card .stock-ticker {
+        font-weight: 800;
+        font-size: 1rem;
+        color: #e5eefb;
+        letter-spacing: 0.02em;
+    }
+    .stock-card .stock-name {
+        font-size: 0.7rem;
+        color: #8ba3c0;
+        margin-top: 2px;
+        opacity: 0.85;
+        line-height: 1.2;
+    }
+    .stock-card .stock-score-badge {
+        background: rgba(96, 165, 250, 0.15);
+        border: 1px solid rgba(96, 165, 250, 0.4);
+        color: #60a5fa;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 800;
+    }
+    .stock-card .stock-price-row {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        margin: 6px 0 8px 0;
+    }
+    .stock-card .stock-price {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #ffffff;
+        letter-spacing: -0.02em;
+    }
+    .stock-card .stock-change {
+        font-size: 0.8rem;
         font-weight: 700;
-        line-height: 1.1;
+        padding: 2px 8px;
+        border-radius: 6px;
+    }
+    .stock-card .stock-change.up {
+        color: #34d399;
+        background: rgba(52, 211, 153, 0.12);
+    }
+    .stock-card .stock-change.down {
+        color: #fb7185;
+        background: rgba(251, 113, 133, 0.12);
+    }
+    .stock-card .stock-metrics {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(139, 163, 192, 0.08);
+    }
+    .stock-card .stock-metric-label {
+        font-size: 0.62rem;
+        color: #8ba3c0;
+        opacity: 0.75;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 2px;
+    }
+    .stock-card .stock-metric-value {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: #e5eefb;
+    }
+    .stock-card .stock-action {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        margin-top: 8px;
+    }
+    .stock-card .stock-action.entry {
+        background: rgba(52, 211, 153, 0.15);
+        color: #34d399;
+        border: 1px solid rgba(52, 211, 153, 0.3);
+    }
+    .stock-card .stock-action.exit {
+        background: rgba(251, 113, 133, 0.15);
+        color: #fb7185;
+        border: 1px solid rgba(251, 113, 133, 0.3);
+    }
+    .stock-card .stock-action.hold {
+        background: rgba(251, 191, 36, 0.15);
+        color: #fbbf24;
+        border: 1px solid rgba(251, 191, 36, 0.3);
+    }
+
+    /* Horizontal scroll row */
+    .stock-scroll {
+        display: flex;
+        gap: 10px;
+        overflow-x: auto;
+        padding: 4px 0 12px 0;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        scroll-snap-type: x mandatory;
+    }
+    .stock-scroll::-webkit-scrollbar { display: none; }
+    .stock-scroll .stock-card {
+        min-width: 260px;
+        max-width: 260px;
+        flex-shrink: 0;
+        scroll-snap-align: start;
+    }
+
+    /* Section header */
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 16px 0 8px 0;
+    }
+    .section-header h3 {
+        font-size: 1rem !important;
+        font-weight: 700 !important;
+        margin: 0 !important;
+        color: #e5eefb;
+    }
+    .section-header .see-all {
+        font-size: 0.75rem;
+        color: #60a5fa;
+        font-weight: 600;
     }
 
     /* MOBILE */
     @media (max-width: 640px) {
         .block-container {
-            padding-left: 0.6rem !important;
-            padding-right: 0.6rem !important;
+            padding-left: 0.65rem !important;
+            padding-right: 0.65rem !important;
             padding-top: 0.5rem !important;
+            padding-bottom: 5rem !important;
         }
-        h1 { font-size: 1.25rem !important; line-height: 1.25 !important;
+        h1 { font-size: 1.2rem !important; line-height: 1.25 !important;
              margin-bottom: 0.3rem !important; }
-        h2 { font-size: 1.05rem !important; }
-        h3 { font-size: 0.95rem !important; }
+        h2 { font-size: 1.02rem !important; }
+        h3 { font-size: 0.92rem !important; }
 
         .kpi-grid {
             grid-template-columns: repeat(2, 1fr);
             gap: 8px;
             margin: 10px 0 16px 0;
         }
-        .kpi-card {
-            padding: 10px 12px;
-            border-radius: 10px;
-        }
-        .kpi-card .kpi-label {
-            font-size: 0.68rem;
-            margin-bottom: 4px;
-        }
-        .kpi-card .kpi-value {
-            font-size: 1.3rem;
+        .kpi-card { padding: 10px 12px; border-radius: 12px; }
+        .kpi-card .kpi-label { font-size: 0.6rem; margin-bottom: 4px; }
+        .kpi-card .kpi-value { font-size: 1.35rem; }
+
+        .stock-scroll .stock-card {
+            min-width: 220px;
+            max-width: 220px;
         }
 
         .stTabs [data-baseweb="tab-list"] {
@@ -1019,14 +1202,19 @@ def inject_mobile_css():
             white-space: nowrap !important;
             scrollbar-width: none !important;
             padding-bottom: 4px !important;
-            gap: 0 !important;
+            gap: 2px !important;
+            border-bottom: 1px solid rgba(139, 163, 192, 0.1) !important;
         }
         .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar { display: none !important; }
         .stTabs [data-baseweb="tab"] {
-            padding: 6px 10px !important;
+            padding: 8px 12px !important;
             font-size: 0.78rem !important;
             white-space: nowrap !important;
             flex-shrink: 0 !important;
+            border-radius: 8px !important;
+        }
+        .stTabs [data-baseweb="tab"][aria-selected="true"] {
+            background: rgba(96, 165, 250, 0.12) !important;
         }
         .stTabs [data-baseweb="tab"] p { font-size: 0.78rem !important; }
 
@@ -1045,20 +1233,10 @@ def inject_mobile_css():
             max-width: 88% !important;
         }
 
-        details summary {
-            font-size: 0.82rem !important;
-            padding: 6px 10px !important;
-        }
-
+        details summary { font-size: 0.82rem !important; padding: 6px 10px !important; }
         .js-plotly-plot, .plot-container { max-height: 340px !important; }
-
-        div[data-testid="stAlert"] {
-            font-size: 0.75rem !important;
-            padding: 8px 10px !important;
-        }
-
+        div[data-testid="stAlert"] { font-size: 0.75rem !important; padding: 8px 10px !important; }
         div[data-baseweb="select"] { font-size: 0.78rem !important; }
-
         div.element-container { margin-bottom: 0.3rem !important; }
         hr { margin: 0.5rem 0 !important; }
         .stTabs { margin-top: 0.5rem !important; }
@@ -1076,25 +1254,20 @@ def inject_mobile_css():
     }
 
     @media (max-width: 380px) {
-        h1 { font-size: 1.15rem !important; }
-        .kpi-card .kpi-value { font-size: 1.1rem; }
-        .kpi-card .kpi-label { font-size: 0.6rem; }
+        h1 { font-size: 1.1rem !important; }
+        .kpi-card .kpi-value { font-size: 1.15rem; }
+        .kpi-card .kpi-label { font-size: 0.55rem; }
+        .stock-scroll .stock-card { min-width: 190px; max-width: 190px; }
     }
 
     @media (min-width: 641px) and (max-width: 1024px) {
-        .kpi-grid {
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-        }
+        .kpi-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
         .kpi-card .kpi-value { font-size: 1.5rem; }
         h1 { font-size: 1.6rem !important; }
     }
 
     @media (min-width: 1025px) {
-        .block-container {
-            padding-left: 3rem !important;
-            padding-right: 3rem !important;
-        }
+        .block-container { padding-left: 3rem !important; padding-right: 3rem !important; }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1110,7 +1283,97 @@ DISPLAY_COLUMNS = [
     "Target Price", "Upside %", "Position Size %",
 ]
 
-# ============= CUSTOM HTML KPI ROW =============
+# ============= SIGNAL HELPERS =============
+def _signal_class(signal):
+    s = str(signal).lower().replace(" ", "-")
+    return f"signal-{s}" if s in {"strong-buy", "buy", "accumulate", "hold", "reduce", "sell"} else "signal-hold"
+
+def _action_class(action):
+    a = str(action)
+    if "ENTRY" in a or "DEEP BUY" in a:
+        return "entry"
+    if "EXIT" in a:
+        return "exit"
+    return "hold"
+
+def render_stock_card_html(row):
+    signal_cls = _signal_class(row.get("AI Signal", "Hold"))
+    action_cls = _action_class(row.get("Valuation Action", ""))
+    cmp_val = row.get("CMP", 0)
+    cmp_str = f"₹{cmp_val:,.0f}" if pd.notna(cmp_val) else "—"
+    upside = row.get("Upside %", 0)
+    if pd.notna(upside):
+        upside_cls = "up" if upside > 0 else "down"
+        upside_str = f"{upside:+.1f}%"
+    else:
+        upside_cls = "up"
+        upside_str = "—"
+    ai_score = int(row.get("AI_Score", 0))
+    mos = row.get("Margin of Safety %", 0)
+    mos_str = f"{mos:+.0f}%" if pd.notna(mos) else "—"
+    entry_p = row.get("Entry Trigger Price", 0)
+    entry_str = f"₹{entry_p:,.0f}" if pd.notna(entry_p) and entry_p > 0 else "—"
+    ticker = row.get("Ticker", "?")
+    name = str(row.get("Name", ""))[:28]
+    action = row.get("Valuation Action", "⚪ HOLD")
+    signal = row.get("AI Signal", "—")
+    return f"""
+    <div class="stock-card {signal_cls}">
+        <div class="stock-header">
+            <div>
+                <div class="stock-ticker">{ticker}</div>
+                <div class="stock-name">{name}</div>
+            </div>
+            <div class="stock-score-badge">{ai_score}</div>
+        </div>
+        <div class="stock-price-row">
+            <div class="stock-price">{cmp_str}</div>
+            <div class="stock-change {upside_cls}">{upside_str}</div>
+        </div>
+        <div class="stock-metrics">
+            <div>
+                <div class="stock-metric-label">MoS</div>
+                <div class="stock-metric-value">{mos_str}</div>
+            </div>
+            <div>
+                <div class="stock-metric-label">Entry</div>
+                <div class="stock-metric-value">{entry_str}</div>
+            </div>
+            <div>
+                <div class="stock-metric-label">Signal</div>
+                <div class="stock-metric-value">{signal}</div>
+            </div>
+        </div>
+        <div class="stock-action {action_cls}">{action}</div>
+    </div>
+    """
+
+def render_stock_card_grid(df, max_items=20):
+    if df.empty:
+        st.info("Koi stock nahi mila.")
+        return
+    subset = df.head(max_items)
+    cards_html = "".join(render_stock_card_html(row) for _, row in subset.iterrows())
+    st.markdown(f"""
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+        {cards_html}
+    </div>
+    """, unsafe_allow_html=True)
+
+def render_horizontal_scroll(df, title, max_items=10):
+    if df.empty:
+        return
+    subset = df.head(max_items)
+    cards_html = "".join(render_stock_card_html(row) for _, row in subset.iterrows())
+    st.markdown(f"""
+    <div class="section-header">
+        <h3>{title}</h3>
+        <span class="see-all">{len(df)} total →</span>
+    </div>
+    <div class="stock-scroll">{cards_html}</div>
+    """, unsafe_allow_html=True)
+
+# ============= KPI ROW =============
 def render_kpi_row(scored):
     inject_mobile_css()
     total = len(scored)
@@ -1120,35 +1383,51 @@ def render_kpi_row(scored):
     clean = int((scored.get("Quality Grade", pd.Series()) == "A — Clean").sum())
     entry = int(scored.get("Valuation Action", pd.Series()).astype(str)
                 .str.contains("DEEP BUY|ENTRY", na=False).sum())
-
+    exit_ = int(scored.get("Valuation Action", pd.Series()).astype(str)
+                .str.contains("EXIT", na=False).sum())
     st.markdown(f"""
     <div class="kpi-grid">
         <div class="kpi-card">
             <div class="kpi-label">Total Stocks</div>
             <div class="kpi-value">{total}</div>
+            <div class="kpi-delta neutral">Portfolio</div>
         </div>
         <div class="kpi-card">
             <div class="kpi-label">Avg AI Score</div>
             <div class="kpi-value">{avg:.1f}</div>
+            <div class="kpi-delta neutral">0-100 scale</div>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card kpi-green">
+            <div class="kpi-label">Entry Triggers</div>
+            <div class="kpi-value">{entry}</div>
+            <div class="kpi-delta up">🟢 Buy zone</div>
+        </div>
+        <div class="kpi-card kpi-red">
+            <div class="kpi-label">Exit Triggers</div>
+            <div class="kpi-value">{exit_}</div>
+            <div class="kpi-delta down">🔴 Sell zone</div>
+        </div>
+        <div class="kpi-card kpi-amber">
             <div class="kpi-label">Strong Buys</div>
             <div class="kpi-value">{sb}</div>
+            <div class="kpi-delta neutral">AI ≥ 90</div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-label">Buy / Strong Buy</div>
+            <div class="kpi-label">Buy + Strong</div>
             <div class="kpi-value">{bl}</div>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-label">Clean (Grade A)</div>
-            <div class="kpi-value">{clean}</div>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-label">🎯 Entry Triggers</div>
-            <div class="kpi-value">{entry}</div>
+            <div class="kpi-delta neutral">AI ≥ 80</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
+
+    entry_df = scored[scored.get("Valuation Action", pd.Series()).astype(str)
+                      .str.contains("DEEP BUY|ENTRY", na=False)].sort_values(
+                      "Margin of Safety %", ascending=False)
+    if not entry_df.empty:
+        render_horizontal_scroll(entry_df, "🎯 Top Entry Opportunities", 10)
+    top_ai = scored.sort_values("AI_Score", ascending=False).head(10)
+    if not top_ai.empty:
+        render_horizontal_scroll(top_ai, "⭐ Top AI-Rated Stocks", 10)
 
 # ============= SCREENER TAB =============
 def render_screener_tab(scored, registry, project_dir):
@@ -1168,19 +1447,40 @@ def render_screener_tab(scored, registry, project_dir):
     f = f.copy()
     sc = detect_sector_column(f)
     if sc and "Sector" not in f.columns: f = f.rename(columns={sc: "Sector"})
-    cols = [c for c in DISPLAY_COLUMNS if c in f.columns]
-    styled = (f[cols].style
-        .map(style_signal, subset=["AI Signal"])
-        .map(style_valuation, subset=["Valuation Action"])
-        .map(style_risk, subset=["Risk Level"])
-        .format({"CMP": "₹{:,.2f}", "AI_Score": "{:.0f}", "AI Confidence": "{:.0f}",
-            "Valuation_Trigger_Score": "{:.0f}",
-            "Entry Trigger Price": "₹{:,.2f}", "Exit Trigger Price": "₹{:,.2f}",
-            "Margin of Safety %": "{:+.2f}%", "Intrinsic Value (Base)": "₹{:,.2f}",
-            "Sharpe": "{:.2f}", "Target Price": "₹{:,.2f}",
-            "Upside %": "{:+.2f}%", "Position Size %": "{:.1f}%"}, na_rep="—"))
-    st.subheader(f"📋 Screened Results ({len(f)} stocks)")
-    st.dataframe(styled, use_container_width=True, height=560, hide_index=True)
+
+    st.subheader(f"📋 Screener ({len(f)} stocks)")
+
+    view_mode = st.radio("View", ["📇 Cards", "📊 Table"],
+                        horizontal=True, key="screener_view",
+                        label_visibility="collapsed")
+
+    if view_mode == "📇 Cards":
+        if f.empty:
+            st.info("Koi stock filters ke according nahi mila.")
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                sort_by = st.selectbox("Sort by",
+                    ["AI_Score", "Margin of Safety %", "Upside %", "Sharpe"],
+                    key="card_sort")
+            with col2:
+                max_cards = st.slider("Max cards", 5, 50, 20, 5, key="max_cards")
+            f_sorted = f.sort_values(sort_by, ascending=False, na_position="last")
+            render_stock_card_grid(f_sorted, max_cards)
+    else:
+        cols = [c for c in DISPLAY_COLUMNS if c in f.columns]
+        styled = (f[cols].style
+            .map(style_signal, subset=["AI Signal"])
+            .map(style_valuation, subset=["Valuation Action"])
+            .map(style_risk, subset=["Risk Level"])
+            .format({"CMP": "₹{:,.2f}", "AI_Score": "{:.0f}", "AI Confidence": "{:.0f}",
+                "Valuation_Trigger_Score": "{:.0f}",
+                "Entry Trigger Price": "₹{:,.2f}", "Exit Trigger Price": "₹{:,.2f}",
+                "Margin of Safety %": "{:+.2f}%", "Intrinsic Value (Base)": "₹{:,.2f}",
+                "Sharpe": "{:.2f}", "Target Price": "₹{:,.2f}",
+                "Upside %": "{:+.2f}%", "Position Size %": "{:.1f}%"}, na_rep="—"))
+        st.dataframe(styled, use_container_width=True, height=560, hide_index=True)
+
     ss = analyse_sectors(scored)
     rot = compute_sector_rotation(project_dir, ss) if not ss.empty else pd.DataFrame()
     idf = build_index_table(scored, registry)
@@ -1197,55 +1497,39 @@ def render_screener_tab(scored, registry, project_dir):
     except Exception as exc:
         d2.warning(f"Excel fail: {exc}")
 
-# ============= DCF TAB — WITH TABS =============
+# ============= DCF TAB =============
 def render_dcf_valuation_tab(scored):
-    st.subheader("💰 DCF Valuation Dashboard")
-    st.caption("Hybrid IV: Enhanced 2-Stage DCF (60%) + Peer-Multiples (40%).")
+    st.subheader("💰 DCF Valuation")
+    st.caption("Hybrid IV: DCF (60%) + Peer-Multiples (40%)")
     if "Intrinsic Value (Base)" not in scored.columns:
         st.warning("Valuation data missing."); return
     val = scored.dropna(subset=["Intrinsic Value (Base)", "CMP"]).copy()
     if val.empty: st.info("Koi valuation data nahi."); return
-
     dv = int((val["Margin of Safety %"] >= 40).sum())
     uv = int(((val["Margin of Safety %"] >= 10) & (val["Margin of Safety %"] < 40)).sum())
     fv = int((val["Margin of Safety %"].abs() < 10).sum())
     ov = int((val["Margin of Safety %"] <= -10).sum())
     am = val["Margin of Safety %"].mean()
     aw = val["WACC Used"].mean() if "WACC Used" in val else np.nan
-
-    # KPI as custom HTML too
     st.markdown(f"""
     <div class="kpi-grid">
-        <div class="kpi-card">
-            <div class="kpi-label">🟢 Deep Value</div>
-            <div class="kpi-value">{dv}</div>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-label">🟢 Undervalued</div>
-            <div class="kpi-value">{uv}</div>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-label">⚪ Fair</div>
-            <div class="kpi-value">{fv}</div>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-label">🔴 Overvalued</div>
-            <div class="kpi-value">{ov}</div>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-label">Avg MoS</div>
-            <div class="kpi-value">{am:+.1f}%</div>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-label">Avg WACC</div>
+        <div class="kpi-card kpi-green"><div class="kpi-label">🟢 Deep Value</div>
+            <div class="kpi-value">{dv}</div><div class="kpi-delta up">MoS ≥ 40%</div></div>
+        <div class="kpi-card kpi-green"><div class="kpi-label">🟢 Undervalued</div>
+            <div class="kpi-value">{uv}</div><div class="kpi-delta up">MoS 10-40%</div></div>
+        <div class="kpi-card kpi-amber"><div class="kpi-label">⚪ Fair</div>
+            <div class="kpi-value">{fv}</div><div class="kpi-delta neutral">MoS ±10%</div></div>
+        <div class="kpi-card kpi-red"><div class="kpi-label">🔴 Overvalued</div>
+            <div class="kpi-value">{ov}</div><div class="kpi-delta down">MoS ≤ -10%</div></div>
+        <div class="kpi-card"><div class="kpi-label">Avg MoS</div>
+            <div class="kpi-value">{am:+.1f}%</div><div class="kpi-delta neutral">Universe</div></div>
+        <div class="kpi-card"><div class="kpi-label">Avg WACC</div>
             <div class="kpi-value">{f"{aw:.1%}" if pd.notna(aw) else "—"}</div>
-        </div>
+            <div class="kpi-delta neutral">CAPM-lite</div></div>
     </div>
     """, unsafe_allow_html=True)
 
     st.divider()
-
-    # Trigger Alerts — Entry & Exit as TABS
     st.markdown("### 🎯 Trigger Alerts")
     trigger_col = "Valuation Action" if "Valuation Action" in val.columns else None
     if trigger_col:
@@ -1254,54 +1538,22 @@ def render_dcf_valuation_tab(scored):
             "Margin of Safety %", ascending=False)
         exit_hits = val[val[trigger_col] == "🔴 EXIT TRIGGER"].sort_values(
             "Margin of Safety %")
-
         entry_tab, exit_tab = st.tabs([
             f"🟢 Entry Zone ({len(entry_hits)})",
-            f"🔴 Exit Zone ({len(exit_hits)})",
-        ])
-
+            f"🔴 Exit Zone ({len(exit_hits)})"])
         with entry_tab:
             if entry_hits.empty:
                 st.info("Koi stock currently entry zone mein nahi hai.")
             else:
-                ec = ["Ticker", "Name", "CMP", "Entry Trigger Price",
-                      "Exit Trigger Price", "Margin of Safety %",
-                      "AI_Score", "Valuation Action"]
-                ec = [c for c in ec if c in entry_hits.columns]
-                st.dataframe(
-                    entry_hits[ec].style
-                    .map(style_valuation, subset=["Valuation Action"])
-                    .format({"CMP": "₹{:,.2f}",
-                             "Entry Trigger Price": "₹{:,.2f}",
-                             "Exit Trigger Price": "₹{:,.2f}",
-                             "Margin of Safety %": "{:+.2f}%",
-                             "AI_Score": "{:.0f}"}, na_rep="—"),
-                    use_container_width=True, hide_index=True,
-                    height=min(500, 40 + 35 * len(entry_hits)))
-
+                render_stock_card_grid(entry_hits, 20)
         with exit_tab:
             if exit_hits.empty:
                 st.info("Koi stock currently exit zone mein nahi hai.")
             else:
-                xc = ["Ticker", "Name", "CMP", "Entry Trigger Price",
-                      "Exit Trigger Price", "Margin of Safety %",
-                      "AI_Score", "Valuation Action"]
-                xc = [c for c in xc if c in exit_hits.columns]
-                st.dataframe(
-                    exit_hits[xc].style
-                    .map(style_valuation, subset=["Valuation Action"])
-                    .format({"CMP": "₹{:,.2f}",
-                             "Entry Trigger Price": "₹{:,.2f}",
-                             "Exit Trigger Price": "₹{:,.2f}",
-                             "Margin of Safety %": "{:+.2f}%",
-                             "AI_Score": "{:.0f}"}, na_rep="—"),
-                    use_container_width=True, hide_index=True,
-                    height=min(500, 40 + 35 * len(exit_hits)))
-
+                render_stock_card_grid(exit_hits, 20)
         st.divider()
 
-    # Filters
-    with st.expander("🔎 Valuation Filters", expanded=False):
+    with st.expander("🔎 Filters", expanded=False):
         mms = st.slider("Min MoS %", -100, 100, -100, 5)
         sigs = st.multiselect("Valuation Signal",
                               sorted(val["Valuation Signal"].dropna().unique().tolist()),
@@ -1310,9 +1562,7 @@ def render_dcf_valuation_tab(scored):
         if sc:
             so = ["All"] + sorted(val[sc].dropna().unique().tolist())
             sf = st.selectbox("Sub-Sector", so)
-        else:
-            sf = "All"
-
+        else: sf = "All"
     f = val[val["Margin of Safety %"].ge(mms) & val["Valuation Signal"].isin(sigs)]
     if sf != "All" and sc: f = f[f[sc] == sf]
     f = f.copy().sort_values("Margin of Safety %", ascending=False,
@@ -1320,9 +1570,7 @@ def render_dcf_valuation_tab(scored):
     sc2 = detect_sector_column(f)
     if sc2 and "Sector" not in f.columns: f = f.rename(columns={sc2: "Sector"})
 
-    # Full Table + Scatter as TABS
     table_tab, chart_tab = st.tabs([f"📋 Full Table ({len(f)})", "📊 Price vs IV"])
-
     with table_tab:
         cols = ["Rank", "Ticker", "Name", "Sector", "CMP", "Lower Intrinsic Value",
                 "Intrinsic Value (Base)", "Upper Intrinsic Value",
@@ -1336,22 +1584,19 @@ def render_dcf_valuation_tab(scored):
             .map(style_valuation, subset=["Valuation Action"])
             .map(style_signal, subset=["AI Signal"])
             .format({"CMP": "₹{:,.2f}", "Lower Intrinsic Value": "₹{:,.2f}",
-                     "Intrinsic Value (Base)": "₹{:,.2f}",
-                     "Upper Intrinsic Value": "₹{:,.2f}",
+                     "Intrinsic Value (Base)": "₹{:,.2f}", "Upper Intrinsic Value": "₹{:,.2f}",
                      "Intrinsic Value (DCF)": "₹{:,.2f}",
                      "Intrinsic Value (Multiples)": "₹{:,.2f}",
-                     "Entry Trigger Price": "₹{:,.2f}",
-                     "Exit Trigger Price": "₹{:,.2f}",
+                     "Entry Trigger Price": "₹{:,.2f}", "Exit Trigger Price": "₹{:,.2f}",
                      "WACC Used": "{:.1%}", "Margin of Safety %": "{:+.2f}%",
                      "To Entry %": "{:+.2f}%", "To Exit %": "{:+.2f}%",
                      "AI_Score": "{:.0f}", "DCF_Valuation_Score": "{:.0f}",
                      "Valuation_Trigger_Score": "{:.0f}"}, na_rep="—"),
             use_container_width=True, hide_index=True, height=560)
-        st.download_button("⬇️ Download Valuation Report",
+        st.download_button("⬇️ Download Report",
                            data=f[cols].to_csv(index=False).encode("utf-8"),
                            file_name=f"dcf_valuation_{datetime.now():%Y%m%d_%H%M}.csv",
                            mime="text/csv")
-
     with chart_tab:
         if go is not None:
             pd_ = f.dropna(subset=["CMP", "Intrinsic Value (Base)"]).copy()
@@ -1369,8 +1614,7 @@ def render_dcf_valuation_tab(scored):
                     line=dict(color="#8ba3c0", dash="dash", width=1.5)))
                 fig.update_layout(title="Above dashed line = undervalued",
                     xaxis_title="Market Price (₹)", yaxis_title="Intrinsic Value (₹)")
-                _style_figure(fig, 500)
-                st.plotly_chart(fig, use_container_width=True)
+                _style_figure(fig, 500); st.plotly_chart(fig, use_container_width=True)
 
 # ============= OTHER TABS =============
 def render_sector_tab(scored, project_dir):
@@ -1433,6 +1677,8 @@ def render_peer_tab(scored):
                           annotation_text=f"Avg: {av_v:.2f}")
         fig.update_layout(title=f"{met} — {sec}", xaxis_title="", yaxis_title=met)
         _style_figure(fig, 400); st.plotly_chart(fig, use_container_width=True)
+    st.markdown("##### Peer Stocks")
+    render_stock_card_grid(peers, 20)
 
 def render_index_tab(scored, registry):
     st.subheader("📊 Index Analysis")
@@ -1486,13 +1732,7 @@ def render_patterns_tab(scored):
     cnt = {p: scored["Patterns"].str.contains(p, regex=False).sum() for p in PATTERN_NAMES}
     pick = st.selectbox("Filter", ["All"] + [p for p, c in cnt.items() if c > 0], key="pat_f")
     f = scored if pick == "All" else scored[scored["Patterns"].str.contains(pick, regex=False)]
-    cs = ["Rank", "Ticker", "Name", "Sector", "CMP", "AI_Score", "AI Signal", "RSI",
-          "Patterns", "Valuation Action", "Quality Grade"]
-    cs = [c for c in cs if c in f.columns]
-    st.dataframe(f[cs].style.map(style_signal, subset=["AI Signal"])
-        .map(style_valuation, subset=["Valuation Action"])
-        .format({"CMP": "₹{:,.2f}", "AI_Score": "{:.0f}", "RSI": "{:.1f}"}, na_rep="—"),
-        use_container_width=True, hide_index=True, height=min(560, 40 + 35 * len(f)))
+    render_stock_card_grid(f, 30)
 
 def render_quality_tab(scored):
     st.subheader("🔍 Data Quality")
@@ -1504,11 +1744,11 @@ def render_quality_tab(scored):
     <div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr);">
         <div class="kpi-card"><div class="kpi-label">Total</div>
             <div class="kpi-value">{tot}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Fetch OK</div>
+        <div class="kpi-card kpi-green"><div class="kpi-label">Fetch OK</div>
             <div class="kpi-value">{fok}/{tot}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Sector Data</div>
+        <div class="kpi-card kpi-amber"><div class="kpi-label">Sector Data</div>
             <div class="kpi-value">{scored[sc].notna().sum()}/{tot if sc else 0}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Valuation OK</div>
+        <div class="kpi-card kpi-green"><div class="kpi-label">Valuation OK</div>
             <div class="kpi-value">{val_ok}/{tot}</div></div>
     </div>
     """, unsafe_allow_html=True)
@@ -1518,15 +1758,7 @@ def render_trade_tab(scored):
     if "Position Size %" not in scored.columns: return
     cand = scored[scored["AI Signal"].isin(["Strong Buy", "Buy", "Accumulate"])].copy()
     if cand.empty: st.info("No Buy-rated stocks."); return
-    cs = ["Rank", "Ticker", "Name", "CMP", "Entry Price", "Stop Loss", "Target Price",
-          "Upside %", "Position Size %", "AI_Score", "Risk Level", "Valuation Action"]
-    cs = [c for c in cs if c in cand.columns]
-    st.dataframe(cand[cs].style.map(style_risk, subset=["Risk Level"])
-        .map(style_valuation, subset=["Valuation Action"])
-        .format({"CMP": "₹{:,.2f}", "Entry Price": "₹{:,.2f}", "Stop Loss": "₹{:,.2f}",
-                 "Target Price": "₹{:,.2f}", "Upside %": "{:+.2f}%",
-                 "Position Size %": "{:.1f}%", "AI_Score": "{:.0f}"}, na_rep="—"),
-        use_container_width=True, hide_index=True, height=min(600, 40 + 35 * len(cand)))
+    render_stock_card_grid(cand, 30)
     total = cand["Position Size %"].sum()
     st.info(f"💡 Total: **{total:.1f}%** across {len(cand)} ideas.")
 
@@ -1536,28 +1768,7 @@ def render_deep_tab(scored):
     t = st.selectbox("Ticker", scored["Ticker"].tolist())
     if not t: return
     row = scored.loc[scored["Ticker"] == t].iloc[0]
-    st.markdown(f"""
-    <div class="kpi-grid" style="grid-template-columns: repeat(3, 1fr);">
-        <div class="kpi-card"><div class="kpi-label">CMP</div>
-            <div class="kpi-value">{fmt_money(row.get("CMP"))}</div></div>
-        <div class="kpi-card"><div class="kpi-label">AI Score</div>
-            <div class="kpi-value">{row.get('AI_Score', 0):.0f}</div></div>
-        <div class="kpi-card"><div class="kpi-label">MoS</div>
-            <div class="kpi-value">{row.get('Margin of Safety %', 0):+.1f}%</div></div>
-        <div class="kpi-card"><div class="kpi-label">Action</div>
-            <div class="kpi-value" style="font-size:1rem;">{row.get("Valuation Action", "—")}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Intrinsic</div>
-            <div class="kpi-value">{fmt_money(row.get("Intrinsic Value (Base)"))}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Upside</div>
-            <div class="kpi-value">{row.get('Upside %', 0):+.2f}%</div></div>
-        <div class="kpi-card"><div class="kpi-label">🎯 Entry</div>
-            <div class="kpi-value">{fmt_money(row.get("Entry Trigger Price"))}</div></div>
-        <div class="kpi-card"><div class="kpi-label">🚪 Exit</div>
-            <div class="kpi-value">{fmt_money(row.get("Exit Trigger Price"))}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Trigger Score</div>
-            <div class="kpi-value">{row.get('Valuation_Trigger_Score', 0):.0f}</div></div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(render_stock_card_html(row), unsafe_allow_html=True)
     tabs = st.tabs(["📈 Chart", "💰 Valuation", "🧮 Fundamentals"])
     with tabs[0]: render_price_chart(t)
     with tabs[1]:
