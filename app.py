@@ -23,7 +23,6 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 LOGGER = logging.getLogger(__name__)
 
-# ============ CONSTANTS ============
 APP_TITLE = "AI Stock Analyzer Pro"
 FUNDAMENTAL_PREFIX = "Nifty"
 TECHNICAL_PREFIX = "Explore_Promising"
@@ -125,7 +124,6 @@ DEFAULT_INDEX_CONSTITUENTS = {
         "BANKBARODA","PNB","IDFCFIRSTB","FEDERALBNK","AUBANK","BANDHANBNK"],
 }
 
-# ============ TAB ORDER ============
 def _tab_order_path(p): return p / DATA_DIR_NAME / TAB_ORDER_FILE
 
 def load_tab_order(project_dir):
@@ -172,7 +170,6 @@ def render_tab_order_ui(project_dir):
                 save_tab_order(project_dir, DEFAULT_TAB_ORDER.copy()); st.rerun()
     return order
 
-# ============ NORMALIZATION ============
 _UNICODE_FIX = str.maketrans({"’":"'","‘":"'","“":'"',"”":'"',"–":"-","—":"-","\u00a0":" "})
 def normalise_columns(df):
     return df.rename(columns={c: str(c).translate(_UNICODE_FIX).strip() for c in df.columns})
@@ -182,7 +179,6 @@ def detect_sector_column(df):
         if c in df.columns: return c
     return None
 
-# ============ INDEX JSON ============
 def _index_json_path(p): return p / DATA_DIR_NAME / INDEX_JSON_NAME
 
 def load_index_constituents(project_dir):
@@ -202,7 +198,6 @@ def load_index_constituents(project_dir):
 def _normalise_ticker(t):
     return str(t).upper().replace(".NS","").replace(".BO","").strip()
 
-# ============ HELPERS ============
 def numeric_column(frame, name, default=np.nan):
     if name not in frame: return pd.Series(default, index=frame.index, dtype="float64")
     return pd.to_numeric(frame[name], errors="coerce")
@@ -240,7 +235,6 @@ def merge_sources(fund, tech):
     if merged.empty: raise ValueError("Dono CSV mein matching Ticker nahi mile.")
     return merged
 
-# ============ SCORING ============
 def calculate_fundamental_score(frame):
     total = pd.Series(0.0, index=frame.index)
     count = pd.Series(0, index=frame.index, dtype="int64")
@@ -437,7 +431,6 @@ def calculate_csv_technical_score(frame):
     if not parts: return pd.Series(50.0, index=frame.index)
     return pd.concat(parts, axis=1).mean(axis=1).fillna(50).clip(0, 100)
 
-# ============ TECHNICAL INDICATORS ============
 def _flatten_columns(data):
     if isinstance(data.columns, pd.MultiIndex):
         l0 = data.columns.get_level_values(0)
@@ -529,7 +522,6 @@ def _compute_indicators(data):
         "Technical_Score": min(tech, 100), "Trend Score": ts, "Momentum Score": ms_val,
         "Volume Score": vs, "Volatility Score": vol_s, "Support Resistance Score": sr_s}
 
-# ============ RISK ============
 @st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
 def fetch_benchmark_history():
     try:
@@ -582,7 +574,6 @@ def compute_risk_metrics(history, benchmark):
         "Nifty 1Y %": round(n1y, 2) if pd.notna(n1y) else np.nan,
         "Relative Strength %": round(rs, 2) if pd.notna(rs) else np.nan}
 
-# ============ PATTERNS ============
 def detect_patterns(row):
     ps = []
     try:
@@ -629,7 +620,6 @@ def build_flag_summary(frame):
         ["A — Clean", "B — Minor", "C — Watch"], default="D — High Risk")
     return out
 
-# ============ TICKER ANALYSIS ============
 @st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
 def analyze_ticker(ticker):
     sym = ticker if ticker.endswith((".NS", ".BO")) else f"{ticker}.NS"
@@ -661,7 +651,6 @@ def fetch_technicals(tickers):
         prog.empty()
     return pd.DataFrame.from_dict(results, orient="index").rename_axis("Ticker").reset_index()
 
-# ============ COMPOSITE ============
 def classify_index_membership(ticker, registry):
     t = _normalise_ticker(ticker)
     ms = [n for n, m in registry.items() if t in m]
@@ -756,7 +745,6 @@ def build_scores(frame, index_registry):
     out["Rank"] = np.arange(1, len(out) + 1)
     return out
 
-# ============ ANALYTICS ============
 def analyse_index(frame, index_name, members):
     norm = frame["Ticker"].map(_normalise_ticker); sub = frame.loc[norm.isin(members)]
     if sub.empty: return {"Index": index_name, "Stocks": 0, "Buy+": 0, "Hold": 0, "Sell+": 0,
@@ -801,7 +789,6 @@ def analyse_sectors(frame):
         if c not in stats.columns: stats[c] = np.nan if c != "Stocks" else 0
     return stats
 
-# ============ SNAPSHOTS ============
 def _snap_dir(p): return p / DATA_DIR_NAME / SNAPSHOT_DIR_NAME
 
 def save_sector_snapshot(project_dir, stats):
@@ -856,7 +843,6 @@ def compute_sector_rotation(project_dir, current_stats):
         ["🚀 Leading", "📈 Improving", "🔻 Lagging", "📉 Weakening"], default="➖ Stable")
     return merged.sort_values("WoW AI Δ", ascending=False, kind="stable").reset_index(drop=True)
 
-# ============ CHARTS ============
 @st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
 def _fetch_chart_for_period(ticker, period, interval):
     sym = ticker if ticker.endswith((".NS", ".BO")) else f"{ticker}.NS"
@@ -1150,7 +1136,6 @@ def render_technical_analysis(row):
         if pill_html:
             st.markdown(f"<div>{pill_html}</div>", unsafe_allow_html=True)
 
-# ============ UI HELPERS ============
 def style_signal(v):
     c = "#34d399" if "Buy" in str(v) else "#fbbf24" if v in {"Accumulate","Hold"} else "#fb7185"
     return f"color: {c}; font-weight: 700"
@@ -1424,9 +1409,7 @@ def render_kpi_row(scored):
     if not entry_df.empty: render_horizontal_scroll(entry_df, "🎯 Top Entry Opportunities", 15)
     top_ai = scored.sort_values("AI_Score", ascending=False).head(15)
     if not top_ai.empty: render_horizontal_scroll(top_ai, "⭐ Top AI-Rated Stocks", 15)
-
-# ============ TAB RENDERERS ============
-def render_screener_tab(scored, registry, project_dir):
+        def render_screener_tab(scored, registry, project_dir):
     with st.expander("🔎 Filters", expanded=False):
         c1, c2 = st.columns(2)
         ms = c1.slider("Min AI Score", 0, 100, 0, 5)
@@ -1480,11 +1463,14 @@ def render_screener_tab(scored, registry, project_dir):
                            use_container_width=True)
     except Exception: pass
 
+
 def render_dcf_valuation_tab(scored):
     st.subheader("💰 DCF Valuation")
-    if "Intrinsic Value (Base)" not in scored.columns: st.warning("No valuation data."); return
+    if "Intrinsic Value (Base)" not in scored.columns:
+        st.warning("No valuation data."); return
     val = scored.dropna(subset=["Intrinsic Value (Base)", "CMP"]).copy()
-    if val.empty: st.info("No data."); return
+    if val.empty:
+        st.info("No data."); return
     dv = int((val["Margin of Safety %"] >= 40).sum())
     uv = int(((val["Margin of Safety %"] >= 10) & (val["Margin of Safety %"] < 40)).sum())
     fv = int((val["Margin of Safety %"].abs() < 10).sum())
@@ -1529,13 +1515,16 @@ def render_dcf_valuation_tab(scored):
         if sc:
             so = ["All"] + sorted(val[sc].dropna().unique().tolist())
             sf = st.selectbox("Sub-Sector", so)
-        else: sf = "All"
+        else:
+            sf = "All"
     f = val[val["Margin of Safety %"].ge(mms) & val["Valuation Signal"].isin(sigs)]
-    if sf != "All" and sc: f = f[f[sc] == sf]
+    if sf != "All" and sc:
+        f = f[f[sc] == sf]
     f = f.copy().sort_values("Margin of Safety %", ascending=False).reset_index(drop=True)
     if "Sector" not in f.columns:
         sc2 = detect_sector_column(f)
-        if sc2: f = f.rename(columns={sc2: "Sector"})
+        if sc2:
+            f = f.rename(columns={sc2: "Sector"})
     table_tab, chart_tab = st.tabs([f"📋 Full Table ({len(f)})", "📊 Price vs IV"])
     with table_tab:
         cols = ["Rank","Ticker","Name","Sector","CMP","Lower Intrinsic Value",
@@ -1563,13 +1552,17 @@ def render_dcf_valuation_tab(scored):
                 mv = float(max(pd_["CMP"].max(), pd_["Intrinsic Value (Base)"].max()))
                 fig.add_trace(go.Scatter(x=[0,mv], y=[0,mv], mode="lines", name="Fair Value",
                     line=dict(color="#8ba3c0", dash="dash", width=1.5)))
-                _style_figure(fig, 500); st.plotly_chart(fig, use_container_width=True)
+                _style_figure(fig, 500)
+                st.plotly_chart(fig, use_container_width=True)
+
 
 def render_deep_tab(scored):
     st.subheader("🔬 Deep Dive")
-    if scored.empty: return
+    if scored.empty:
+        return
     t = st.selectbox("Ticker", scored["Ticker"].tolist())
-    if not t: return
+    if not t:
+        return
     row = scored.loc[scored["Ticker"] == t].iloc[0]
     st.markdown(render_stock_card_html(row), unsafe_allow_html=True)
     tabs = st.tabs(["📈 Chart", "💰 Valuation", "📊 Technical", "🧮 Fundamentals"])
@@ -1592,6 +1585,7 @@ def render_deep_tab(scored):
               "Operating Cash Flow","Total Debt","Cash and Equivalent","Market Cap"] if k in row}
         st.json({k: (None if pd.isna(v) else (float(v) if isinstance(v, (int,float,np.number)) else v))
                  for k, v in fd.items()})
+
 
 def render_hybrid_tab(scored, project_dir):
     st.subheader("🔀 Hybrid Analytics")
@@ -1616,15 +1610,19 @@ def render_hybrid_tab(scored, project_dir):
                 "Nifty 1Y %": "{:+.2f}%", "Relative Strength %": "{:+.2f}%"}, na_rep="—"),
                 use_container_width=True, hide_index=True)
     with hyb_tabs[1]:
-        if "Red Flag Count" not in scored.columns: st.info("No data.")
+        if "Red Flag Count" not in scored.columns:
+            st.info("No data.")
         else:
             fl = scored[scored["Red Flag Count"] > 0].sort_values(
                 ["Red Flag Count","AI_Score"], ascending=[False, False])
-            if fl.empty: st.success("✅ No red flags.")
-            else: render_stock_card_grid(fl, 30)
+            if fl.empty:
+                st.success("✅ No red flags.")
+            else:
+                render_stock_card_grid(fl, 30)
     with hyb_tabs[2]:
         ss = analyse_sectors(scored)
-        if ss.empty: st.info("No sub-sector data.")
+        if ss.empty:
+            st.info("No sub-sector data.")
         else:
             save_sector_snapshot(project_dir, ss)
             st.dataframe(ss.style.background_gradient(
@@ -1633,14 +1631,17 @@ def render_hybrid_tab(scored, project_dir):
                          "Avg Technical": "{:.1f}", "Avg Sector-Rel": "{:.1f}",
                          "Avg Rank Composite": "{:.1f}", "Avg PE": "{:.1f}",
                          "Avg Upside %": "{:+.1f}%"}, na_rep="—"),
-                use_container_width=True, hide_index=True, height=min(640, 40 + 32*len(ss)))
+                use_container_width=True, hide_index=True,
+                height=min(640, 40 + 32*len(ss)))
     with hyb_tabs[3]:
         ss = analyse_sectors(scored)
-        if ss.empty: st.info("No sub-sector data.")
+        if ss.empty:
+            st.info("No sub-sector data.")
         else:
             save_sector_snapshot(project_dir, ss)
             rot = compute_sector_rotation(project_dir, ss)
-            if rot.empty: st.info("Rotation unavailable.")
+            if rot.empty:
+                st.info("Rotation unavailable.")
             elif not rot["Prev AI Score"].notna().any():
                 st.info("📌 Pehla run — WoW next run se populate hoga.")
             else:
@@ -1654,20 +1655,28 @@ def render_hybrid_tab(scored, project_dir):
                              "WoW Sector-Rel Δ": "{:+.1f}"}, na_rep="—"),
                     use_container_width=True, hide_index=True)
 
+
 def render_trade_tab(scored):
     st.subheader("💼 Trade Plan")
-    if "Position Size %" not in scored.columns: return
+    if "Position Size %" not in scored.columns:
+        return
     cand = scored[scored["AI Signal"].isin(["Strong Buy","Buy","Accumulate"])].copy()
-    if cand.empty: st.info("No buy-rated stocks."); return
+    if cand.empty:
+        st.info("No buy-rated stocks.")
+        return
     render_stock_card_grid(cand, 30)
     st.info(f"💡 Total: **{cand['Position Size %'].sum():.1f}%** across {len(cand)} ideas.")
+
 
 def render_peer_tab(scored):
     st.markdown("### 👥 Peer Comparison")
     sc = detect_sector_column(scored)
-    if sc is None or scored[sc].isna().all(): st.info("No data."); return
+    if sc is None or scored[sc].isna().all():
+        st.info("No data.")
+        return
     ss = sorted(scored[sc].dropna().unique().tolist())
-    if not ss: return
+    if not ss:
+        return
     sec = st.selectbox("Sub-Sector", ss, key="peer_sec")
     mo = ["AI_Score","Fundamental_Score_AI","Sector_Relative_Score","Technical_Score",
           "Rank_Composite","CSV_Technical_Score","Analyst_Consensus_Score",
@@ -1676,7 +1685,8 @@ def render_peer_tab(scored):
     av = [m for m in mo if m in scored.columns]
     met = st.selectbox("Metric", av, key="peer_met")
     peers = scored.loc[scored[sc] == sec].copy()
-    if peers.empty: return
+    if peers.empty:
+        return
     v = pd.to_numeric(peers[met], errors="coerce")
     peers["_v"] = v
     peers = peers.sort_values("_v", ascending=False, na_position="last").reset_index(drop=True)
@@ -1689,46 +1699,49 @@ def render_peer_tab(scored):
             fig.add_hline(y=av_v, line_dash="dash", line_color="#60a5fa",
                           annotation_text=f"Avg: {av_v:.2f}")
         fig.update_layout(title=f"{met} — {sec}", xaxis_title="", yaxis_title=met)
-        _style_figure(fig, 400); st.plotly_chart(fig, use_container_width=True)
+        _style_figure(fig, 400)
+        st.plotly_chart(fig, use_container_width=True)
     render_stock_card_grid(peers, 20)
+
 
 def render_index_tab(scored, registry):
     st.subheader("📊 Index Analysis")
     idf = build_index_table(scored, registry)
-    if idf.empty or idf["Stocks"].sum() == 0: st.info("No constituents."); return
+    if idf.empty or idf["Stocks"].sum() == 0:
+        st.info("No constituents.")
+        return
     st.dataframe(idf.style.format({"Avg AI Score": "{:.1f}", "Avg Fundamental": "{:.1f}",
         "Avg Technical": "{:.1f}", "Avg Sector-Rel": "{:.1f}",
         "Avg Upside %": "{:+.1f}%", "Avg PE": "{:.1f}"}, na_rep="—"),
         use_container_width=True, hide_index=True)
-    if go is None: return
+    if go is None:
+        return
     fig = go.Figure()
     fig.add_trace(go.Bar(x=idf["Index"], y=idf["Buy+"], name="Buy+", marker_color="#34d399"))
     fig.add_trace(go.Bar(x=idf["Index"], y=idf["Hold"], name="Hold", marker_color="#fbbf24"))
     fig.add_trace(go.Bar(x=idf["Index"], y=idf["Sell+"], name="Sell+", marker_color="#fb7185"))
     fig.update_layout(barmode="stack", title="Breadth")
-    _style_figure(fig, 380); st.plotly_chart(fig, use_container_width=True)
+    _style_figure(fig, 380)
+    st.plotly_chart(fig, use_container_width=True)
+
 
 def render_patterns_tab(scored):
     st.subheader("📐 Pattern Scanner")
-    if "Patterns" not in scored.columns: return
+    if "Patterns" not in scored.columns:
+        return
     cnt = {p: scored["Patterns"].str.contains(p, regex=False).sum() for p in PATTERN_NAMES}
     pick = st.selectbox("Filter", ["All"] + [p for p, c in cnt.items() if c > 0], key="pat_f")
     f = scored if pick == "All" else scored[scored["Patterns"].str.contains(pick, regex=False)]
     render_stock_card_grid(f, 30)
+
 
 def render_quality_tab(scored):
     st.subheader("🔍 Data Quality")
     tot = len(scored)
     fok = int((scored.get("Fetch Status", pd.Series()) == "OK").sum())
     sc = detect_sector_column(scored)
-    val_ok = scored.get('Intrinsic Value (Base)', pd.Series()).notna().sum()
-    def render_quality_tab(scored):
-    st.subheader("🔍 Data Quality")
-    tot = len(scored)
-    fok = int((scored.get("Fetch Status", pd.Series()) == "OK").sum())
-    sc = detect_sector_column(scored)
-    val_ok = scored.get('Intrinsic Value (Base)', pd.Series()).notna().sum()
-    sector_ok = scored[sc].notna().sum() if sc else 0
+    val_ok = int(scored.get('Intrinsic Value (Base)', pd.Series()).notna().sum())
+    sector_ok = int(scored[sc].notna().sum()) if sc else 0
     st.markdown(
         f'<div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr);">'
         f'<div class="kpi-card"><div class="kpi-label">Total</div>'
@@ -1739,12 +1752,9 @@ def render_quality_tab(scored):
         f'<div class="kpi-value">{sector_ok}/{tot}</div></div>'
         f'<div class="kpi-card kpi-green"><div class="kpi-label">Valuation OK</div>'
         f'<div class="kpi-value">{val_ok}/{tot}</div></div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+        f'</div>', unsafe_allow_html=True)
 
 
-# ============ EXCEL EXPORT ============
 def _build_excel(scored, ss, rot, idf):
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as w:
@@ -1758,7 +1768,6 @@ def _build_excel(scored, ss, rot, idf):
     return buf.getvalue()
 
 
-# ============ DASHBOARD ============
 def render_dashboard(scored, registry, project_dir):
     render_kpi_row(scored)
     st.divider()
@@ -1790,17 +1799,15 @@ def render_dashboard(scored, registry, project_dir):
                 st.error(f"Error in {key}: {exc}")
 
 
-# ============ SIDEBAR ============
 def render_sidebar(project_dir):
     with st.sidebar:
         st.header("📁 Data Sources")
-        st.caption("Upload CSVs — `data/` folder me save honge.")
+        st.caption("Upload CSVs — data folder me save honge.")
         fu = st.file_uploader("Nifty Fundamentals CSV", type=["csv"], key="fund_up")
         tu = st.file_uploader("Explore Promising CSV", type=["csv"], key="tech_up")
     return fu, tu
 
 
-# ============ MAIN ============
 def main():
     st.set_page_config(
         page_title=APP_TITLE,
@@ -1810,7 +1817,6 @@ def main():
     )
     inject_mobile_css()
 
-    # Auto-refresh every 15 min
     refresh_count = 0
     if AUTOREFRESH_AVAILABLE:
         refresh_count = st_autorefresh(
@@ -1818,7 +1824,6 @@ def main():
             limit=None,
             key="auto_refresh_tick",
         )
-        # Clear cache every hour (force fresh data)
         if refresh_count % 4 == 0 and refresh_count > 0:
             st.cache_data.clear()
 
@@ -1829,10 +1834,8 @@ def main():
     registry = load_index_constituents(project_dir)
     fu, tu = render_sidebar(project_dir)
 
-    # Tab order reorder UI
     order = render_tab_order_ui(project_dir)
 
-    # Auto-refresh status in sidebar
     with st.sidebar:
         st.divider()
         if AUTOREFRESH_AVAILABLE:
