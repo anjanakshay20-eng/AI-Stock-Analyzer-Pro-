@@ -1722,6 +1722,162 @@ def render_quality_tab(scored):
     fok = int((scored.get("Fetch Status", pd.Series()) == "OK").sum())
     sc = detect_sector_column(scored)
     val_ok = scored.get('Intrinsic Value (Base)', pd.Series()).notna().sum()
+    def render_quality_tab(scored):
+    st.subheader("🔍 Data Quality")
+    tot = len(scored)
+    fok = int((scored.get("Fetch Status", pd.Series()) == "OK").sum())
+    sc = detect_sector_column(scored)
+    val_ok = scored.get('Intrinsic Value (Base)', pd.Series()).notna().sum()
+    sector_ok = scored[sc].notna().sum() if sc else 0
     st.markdown(
         f'<div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr);">'
-       
+        f'<div class="kpi-card"><div class="kpi-label">Total</div>'
+        f'<div class="kpi-value">{tot}</div></div>'
+        f'<div class="kpi-card kpi-green"><div class="kpi-label">Fetch OK</div>'
+        f'<div class="kpi-value">{fok}/{tot}</div></div>'
+        f'<div class="kpi-card kpi-amber"><div class="kpi-label">Sector Data</div>'
+        f'<div class="kpi-value">{sector_ok}/{tot}</div></div>'
+        f'<div class="kpi-card kpi-green"><div class="kpi-label">Valuation OK</div>'
+        f'<div class="kpi-value">{val_ok}/{tot}</div></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+# ============ EXCEL EXPORT ============
+def _build_excel(scored, ss, rot, idf):
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as w:
+        scored.to_excel(w, sheet_name="Screener", index=False)
+        if not ss.empty:
+            ss.to_excel(w, sheet_name="Sectors", index=False)
+        if not rot.empty:
+            rot.to_excel(w, sheet_name="Rotation", index=False)
+        if not idf.empty:
+            idf.to_excel(w, sheet_name="Indices", index=False)
+    return buf.getvalue()
+
+
+# ============ DASHBOARD ============
+def render_dashboard(scored, registry, project_dir):
+    render_kpi_row(scored)
+    st.divider()
+    order = st.session_state.get("tab_order", DEFAULT_TAB_ORDER)
+    labels = [TAB_META[k]["label"] for k in order]
+    tabs = st.tabs(labels)
+    for tab, key in zip(tabs, order):
+        with tab:
+            try:
+                if key == "screener":
+                    render_screener_tab(scored, registry, project_dir)
+                elif key == "dcf":
+                    render_dcf_valuation_tab(scored)
+                elif key == "deep":
+                    render_deep_tab(scored)
+                elif key == "hybrid":
+                    render_hybrid_tab(scored, project_dir)
+                elif key == "trade":
+                    render_trade_tab(scored)
+                elif key == "peers":
+                    render_peer_tab(scored)
+                elif key == "indices":
+                    render_index_tab(scored, registry)
+                elif key == "patterns":
+                    render_patterns_tab(scored)
+                elif key == "quality":
+                    render_quality_tab(scored)
+            except Exception as exc:
+                st.error(f"Error in {key}: {exc}")
+
+
+# ============ SIDEBAR ============
+def render_sidebar(project_dir):
+    with st.sidebar:
+        st.header("📁 Data Sources")
+        st.caption("Upload CSVs — `data/` folder me save honge.")
+        fu = st.file_uploader("Nifty Fundamentals CSV", type=["csv"], key="fund_up")
+        tu = st.file_uploader("Explore Promising CSV", type=["csv"], key="tech_up")
+    return fu, tu
+
+
+# ============ MAIN ============
+def main():
+    st.set_page_config(
+        page_title=APP_TITLE,
+        page_icon="📈",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
+    inject_mobile_css()
+
+    # Auto-refresh every 15 min
+    refresh_count = 0
+    if AUTOREFRESH_AVAILABLE:
+        refresh_count = st_autorefresh(
+            interval=AUTO_REFRESH_MIN * 60 * 1000,
+            limit=None,
+            key="auto_refresh_tick",
+        )
+        # Clear cache every hour (force fresh data)
+        if refresh_count % 4 == 0 and refresh_count > 0:
+            st.cache_data.clear()
+
+    st.title(f"📈 {APP_TITLE}")
+    st.caption("10-dim AI Score + Hybrid DCF + Entry/Exit Triggers.")
+
+    project_dir = Path(__file__).parent
+    registry = load_index_constituents(project_dir)
+    fu, tu = render_sidebar(project_dir)
+
+    # Tab order reorder UI
+    order = render_tab_order_ui(project_dir)
+
+    # Auto-refresh status in sidebar
+    with st.sidebar:
+        st.divider()
+        if AUTOREFRESH_AVAILABLE:
+            st.caption(f"🔄 Auto-refresh: every {AUTO_REFRESH_MIN} min")
+            st.caption(f"⏱️ Last tick: #{refresh_count}")
+        else:
+            st.caption("⚠️ Auto-refresh off")
+        st.caption(f"🕐 Loaded: {datetime.now():%H:%M:%S}")
+
+    if fu:
+        persist_uploaded_csv(fu, FUNDAMENTAL_PREFIX, project_dir)
+    if tu:
+        persist_uploaded_csv(tu, TECHNICAL_PREFIX, project_dir)
+
+    try:
+        fund = read_csv_source(
+            fu,
+            find_latest_csv(project_dir, FUNDAMENTAL_PREFIX),
+            "Fundamentals",
+        )
+        _ = read_csv_source(
+            tu,
+            find_latest_csv(project_dir, TECHNICAL_PREFIX),
+            "Technicals",
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        st.error(str(exc))
+        st.stop()
+
+    tickers = fund["Ticker"].dropna().unique().tolist()
+    st.info(f"📥 {len(tickers)} tickers ka data fetch ho raha hai...")
+
+    tech = fetch_technicals(tickers)
+
+    try:
+        merged = merge_sources(fund, tech)
+    except ValueError as exc:
+        st.error(str(exc))
+        st.stop()
+
+    with st.spinner("Scoring + valuation compute ho rahe hain..."):
+        scored = build_scores(merged, registry)
+
+    render_dashboard(scored, registry, project_dir)
+
+
+if __name__ == "__main__":
+    main()
