@@ -1807,3 +1807,65 @@ def render_sidebar(project_dir):
     with st.sidebar:
         st.header("📁 Data Sources")
         st.caption("Upload
+def render_sidebar(project_dir):
+    with st.sidebar:
+        st.header("📁 Data Sources")
+        st.caption("Upload CSVs — data/ folder me save honge.")
+        fu = st.file_uploader("Nifty Fundamentals CSV", type=["csv"], key="f")
+        tu = st.file_uploader("Explore Promising CSV", type=["csv"], key="t")
+    return fu, tu
+
+
+# ============ MAIN ============
+def main():
+    st.set_page_config(page_title=APP_TITLE, page_icon="📈", layout="wide",
+                       initial_sidebar_state="collapsed")
+    inject_mobile_css()
+
+    if AUTOREFRESH_AVAILABLE:
+        refresh_count = st_autorefresh(interval=AUTO_REFRESH_MIN * 60 * 1000,
+                                       limit=None, key="auto_refresh_tick")
+        if refresh_count % 4 == 0 and refresh_count > 0:
+            st.cache_data.clear()
+    else:
+        refresh_count = 0
+
+    st.title(f"📈 {APP_TITLE}")
+    st.caption("10-dim AI Score + Hybrid DCF + Entry/Exit Triggers.")
+
+    project_dir = Path(__file__).parent
+    registry = load_index_constituents(project_dir)
+    fu, tu = render_sidebar(project_dir)
+
+    order = render_tab_order_ui(project_dir)
+
+    with st.sidebar:
+        st.divider()
+        if AUTOREFRESH_AVAILABLE:
+            st.caption(f"🔄 Auto-refresh: every {AUTO_REFRESH_MIN} min")
+            st.caption(f"⏱️ Last tick: #{refresh_count}")
+        else:
+            st.caption("⚠️ Auto-refresh off")
+        st.caption(f"🕐 Loaded: {datetime.now():%H:%M:%S}")
+
+    if fu: persist_uploaded_csv(fu, FUNDAMENTAL_PREFIX, project_dir)
+    if tu: persist_uploaded_csv(tu, TECHNICAL_PREFIX, project_dir)
+    try:
+        fund = read_csv_source(fu, find_latest_csv(project_dir, FUNDAMENTAL_PREFIX), "Fundamentals")
+        _ = read_csv_source(tu, find_latest_csv(project_dir, TECHNICAL_PREFIX), "Technicals")
+    except (FileNotFoundError, ValueError) as exc:
+        st.error(str(exc)); st.stop()
+    tickers = fund["Ticker"].dropna().unique().tolist()
+    st.info(f"📥 {len(tickers)} tickers ka data fetch ho raha hai...")
+    tech = fetch_technicals(tickers)
+    try:
+        merged = merge_sources(fund, tech)
+    except ValueError as exc:
+        st.error(str(exc)); st.stop()
+    with st.spinner("Scoring + valuation compute ho rahe hain..."):
+        scored = build_scores(merged, registry)
+    render_dashboard(scored, registry, project_dir)
+
+
+if __name__ == "__main__":
+    main()
