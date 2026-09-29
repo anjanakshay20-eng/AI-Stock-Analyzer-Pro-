@@ -1,4 +1,4 @@
-"""AI Stock Analyzer Pro — v6 Complete."""
+"""AI Stock Analyzer Pro — v7 Complete."""
 
 from __future__ import annotations
 import concurrent.futures, io, json, logging
@@ -70,6 +70,9 @@ CHART_OVERLAYS = {
     "SuperTrend": {"color": "#10b981", "kind": "supertrend", "col": "SuperTrend_Val"},
     "VWAP": {"color": "#f59e0b", "kind": "vwap"},
     "PSAR": {"color": "#8b5cf6", "kind": "psar"},
+    "52W High": {"color": "#ef4444", "kind": "52w_high", "col": "52W High"},
+    "52W Low":  {"color": "#10b981", "kind": "52w_low",  "col": "52W Low"},
+    "Fibonacci": {"color": "#a78bfa", "kind": "fibonacci"},
 }
 CHART_SUBPLOTS = ["Volume", "RSI", "MACD", "Stochastic", "ADX", "ATR", "OBV"]
 
@@ -862,7 +865,7 @@ def _style_figure(fig, height=340):
     fig.update_yaxes(gridcolor="#1c2e45", zerolinecolor="#1c2e45")
     return fig
 
-def _compute_overlay_series(h, kind, window):
+def _compute_overlay_series(h, kind, window=None):
     close = h["Close"]; high = h["High"]; low = h["Low"]
     if kind == "sma": return close.rolling(window).mean()
     if kind == "ema": return close.ewm(span=window, adjust=False).mean()
@@ -904,7 +907,31 @@ def _compute_overlay_series(h, kind, window):
                     if ln[i] < ep: ep = ln[i]; af = min(af+0.02, 0.2)
                     psar[i] = max(psar[i], hn[i-1], hn[i-2] if i > 1 else hn[i-1])
         return pd.Series(psar, index=h.index)
+    if kind == "52w_high":
+        h52 = float(high.tail(252).max()) if len(high) >= 252 else float(high.max())
+        return pd.Series(h52, index=h.index)
+    if kind == "52w_low":
+        l52 = float(low.tail(252).min()) if len(low) >= 252 else float(low.min())
+        return pd.Series(l52, index=h.index)
+    if kind == "fibonacci":
+        return None
     return None
+
+def _compute_fibonacci_levels(h):
+    high = h["High"]; low = h["Low"]
+    hi = float(high.tail(252).max()) if len(high) >= 252 else float(high.max())
+    lo = float(low.tail(252).min()) if len(low) >= 252 else float(low.min())
+    diff = hi - lo
+    if diff <= 0: return {}
+    return {
+        "0.0% (High)":  hi,
+        "23.6%":        hi - 0.236 * diff,
+        "38.2%":        hi - 0.382 * diff,
+        "50.0%":        hi - 0.500 * diff,
+        "61.8%":        hi - 0.618 * diff,
+        "78.6%":        hi - 0.786 * diff,
+        "100.0% (Low)": lo,
+    }
 
 def _build_subplot_trace(h, kind):
     close = h["Close"]; high = h["High"]; low = h["Low"]; volume = h["Volume"]
@@ -954,33 +981,66 @@ def _build_subplot_trace(h, kind):
 def render_price_chart(ticker, row=None):
     if go is None or make_subplots is None:
         st.info("`pip install plotly` karein."); return
-    ovl_key = f"ovl_{ticker}"
-    if ovl_key not in st.session_state:
-        st.session_state[ovl_key] = ["SMA 20", "SMA 50", "SMA 200"]
-    selected_ovl = st.multiselect("📊 Price Overlays",
-        options=list(CHART_OVERLAYS.keys()), default=st.session_state[ovl_key],
-        key=f"ms_{ovl_key}")
-    st.session_state[ovl_key] = selected_ovl
-    sub_key = f"sub_{ticker}"
-    if sub_key not in st.session_state:
-        st.session_state[sub_key] = ["Volume", "RSI"]
-    selected_sub = st.multiselect("📉 Subplots", options=CHART_SUBPLOTS,
-        default=st.session_state[sub_key], key=f"ms_{sub_key}")
-    st.session_state[sub_key] = selected_sub
-    period_labels = ["1D", "1W", "1M", "3M", "6M", "1Y", "5Y"]
-    period_map = {"1D": ("1d", "5m"), "1W": ("5d", "30m"), "1M": ("1mo", "1d"),
-                  "3M": ("3mo", "1d"), "6M": ("6mo", "1d"), "1Y": ("1y", "1d"),
-                  "5Y": ("5y", "1d")}
-    state_key = f"chart_period_{ticker}"
-    if state_key not in st.session_state: st.session_state[state_key] = "1Y"
-    selected = st.radio("Period", options=period_labels,
-        index=period_labels.index(st.session_state[state_key]),
-        horizontal=True, key=f"radio_{ticker}", label_visibility="collapsed")
-    st.session_state[state_key] = selected
+
+    show_key = f"chart_show_settings_{ticker}"
+    if show_key not in st.session_state:
+        st.session_state[show_key] = True
+
+    if st.session_state[show_key]:
+        with st.expander("⚙️ Chart Settings", expanded=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                ovl_key = f"ovl_{ticker}"
+                if ovl_key not in st.session_state:
+                    st.session_state[ovl_key] = ["SMA 20", "SMA 50", "SMA 200"]
+                selected_ovl = st.multiselect("📊 Price Overlays",
+                    options=list(CHART_OVERLAYS.keys()),
+                    default=st.session_state[ovl_key], key=f"ms_{ovl_key}")
+                st.session_state[ovl_key] = selected_ovl
+            with c2:
+                sub_key = f"sub_{ticker}"
+                if sub_key not in st.session_state:
+                    st.session_state[sub_key] = ["Volume", "RSI"]
+                selected_sub = st.multiselect("📉 Subplots",
+                    options=CHART_SUBPLOTS,
+                    default=st.session_state[sub_key], key=f"ms_{sub_key}")
+                st.session_state[sub_key] = selected_sub
+            period_labels = ["1D", "1W", "1M", "3M", "6M", "1Y", "5Y"]
+            state_key = f"chart_period_{ticker}"
+            if state_key not in st.session_state:
+                st.session_state[state_key] = "1Y"
+            selected_period = st.radio("⏱️ Time Range",
+                options=period_labels,
+                index=period_labels.index(st.session_state[state_key]),
+                horizontal=True, key=f"radio_{ticker}")
+            st.session_state[state_key] = selected_period
+            if st.button("✔️ Done — Hide Settings", key=f"done_{ticker}",
+                         use_container_width=True, type="primary"):
+                st.session_state[show_key] = False
+                st.rerun()
+    else:
+        ec1, ec2 = st.columns([3, 1])
+        with ec1:
+            period_now = st.session_state.get(f"chart_period_{ticker}", "1Y")
+            st.caption(f"📊 {period_now} • Click ⚙️ to change")
+        with ec2:
+            if st.button("⚙️ Edit", key=f"edit_{ticker}", use_container_width=True):
+                st.session_state[show_key] = True
+                st.rerun()
+        selected_ovl = st.session_state.get(f"ovl_{ticker}", ["SMA 20", "SMA 50", "SMA 200"])
+        selected_sub = st.session_state.get(f"sub_{ticker}", ["Volume", "RSI"])
+
+    period_map = {
+        "1D": ("1d", "5m"), "1W": ("5d", "30m"), "1M": ("1mo", "1d"),
+        "3M": ("3mo", "1d"), "6M": ("6mo", "1d"), "1Y": ("1y", "1d"),
+        "5Y": ("5y", "1d"),
+    }
+    selected = st.session_state.get(f"chart_period_{ticker}", "1Y")
     period, interval = period_map[selected]
     h = _fetch_chart_for_period(ticker, period, interval)
     if h.empty:
         st.warning(f"{ticker} chart data nahi mila."); return
+
     n_sub = len(selected_sub)
     if n_sub > 0:
         heights = [0.55] + [0.45 / n_sub] * n_sub
@@ -989,12 +1049,27 @@ def render_price_chart(ticker, row=None):
                             subplot_titles=[""] + selected_sub)
     else:
         fig = make_subplots(rows=1, cols=1)
+
     fig.add_trace(go.Candlestick(x=h.index, open=h["Open"], high=h["High"],
         low=h["Low"], close=h["Close"], name=ticker,
         increasing_line_color="#34d399", decreasing_line_color="#fb7185"), row=1, col=1)
+
     for ov_name in selected_ovl:
         meta = CHART_OVERLAYS[ov_name]
-        line = _compute_overlay_series(h, meta["kind"], meta.get("window"))
+        kind = meta["kind"]
+        if kind == "fibonacci":
+            fib_levels = _compute_fibonacci_levels(h)
+            palette = ["#ef4444", "#f59e0b", "#fbbf24", "#34d399", "#10b981",
+                       "#06b6d4", "#8b5cf6"]
+            for i, (lbl, price) in enumerate(fib_levels.items()):
+                fig.add_trace(go.Scatter(
+                    x=[h.index[0], h.index[-1]], y=[price, price],
+                    mode="lines", name=f"Fib {lbl}: ₹{price:,.2f}",
+                    line=dict(color=palette[i % len(palette)], width=1, dash="dot"),
+                    hovertemplate=f"Fib {lbl}: ₹{price:,.2f}<extra></extra>",
+                ), row=1, col=1)
+            continue
+        line = _compute_overlay_series(h, kind, meta.get("window"))
         if line is None: continue
         display_val = None
         if row is not None and meta.get("col") in row.index:
@@ -1002,27 +1077,49 @@ def render_price_chart(ticker, row=None):
             if pd.notna(v): display_val = float(v)
         if display_val is None and not line.dropna().empty:
             display_val = float(line.dropna().iloc[-1])
-        legend_name = f"{ov_name}: ₹{display_val:,.2f}" if display_val is not None else ov_name
-        if meta["kind"] == "psar":
-            fig.add_trace(go.Scatter(x=h.index, y=line, mode="markers", name=legend_name,
-                marker=dict(color=meta["color"], size=4)), row=1, col=1)
+        legend_name = (f"{ov_name}: ₹{display_val:,.2f}"
+                       if display_val is not None else ov_name)
+        if kind in ("52w_high", "52w_low"):
+            fig.add_trace(go.Scatter(
+                x=[h.index[0], h.index[-1]], y=[display_val, display_val],
+                mode="lines", name=legend_name,
+                line=dict(color=meta["color"], width=1.5, dash="dash"),
+                hovertemplate=f"{ov_name}: ₹{display_val:,.2f}<extra></extra>",
+            ), row=1, col=1)
+        elif kind == "psar":
+            fig.add_trace(go.Scatter(x=h.index, y=line, mode="markers",
+                name=legend_name, marker=dict(color=meta["color"], size=4)),
+                row=1, col=1)
         else:
-            fig.add_trace(go.Scatter(x=h.index, y=line, mode="lines", name=legend_name,
-                line=dict(color=meta["color"], width=1.8)), row=1, col=1)
+            fig.add_trace(go.Scatter(x=h.index, y=line, mode="lines",
+                name=legend_name, line=dict(color=meta["color"], width=1.8)),
+                row=1, col=1)
+
     for i, sp_name in enumerate(selected_sub, start=2):
         for tr in _build_subplot_trace(h, sp_name):
             fig.add_trace(tr, row=i, col=1)
-    fig.update_layout(xaxis_rangeslider_visible=False,
+
+    fig.update_layout(
+        xaxis_rangeslider_visible=False,
         title=f"{ticker} — {selected} Price Action",
-        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1,
-                    font=dict(size=13, color="#e5eefb", family="sans-serif"),
-                    bgcolor="rgba(7,13,24,0.7)", bordercolor="rgba(96,165,250,0.3)",
-                    borderwidth=1),
-        margin=dict(t=80, b=30, l=20, r=20))
+        legend=dict(
+            orientation="v", yanchor="top", y=0.99,
+            xanchor="left", x=0.01,
+            font=dict(size=12, color="#e5eefb", family="sans-serif"),
+            bgcolor="rgba(7,13,24,0.85)",
+            bordercolor="rgba(96,165,250,0.3)", borderwidth=1,
+        ),
+        margin=dict(t=60, b=30, l=20, r=20),
+        dragmode="pan",
+    )
     fig.update_xaxes(gridcolor="#1c2e45", zerolinecolor="#1c2e45")
     fig.update_yaxes(gridcolor="#1c2e45", zerolinecolor="#1c2e45")
-    _style_figure(fig, 500 + n_sub * 130)
-    st.plotly_chart(fig, use_container_width=True)
+    _style_figure(fig, 480 + n_sub * 130)
+    st.plotly_chart(fig, use_container_width=True, config={
+        "displaylogo": False,
+        "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+        "scrollZoom": True,
+    })
 
 def _gauge_chart(value, title):
     try: value = float(value) if pd.notna(value) else 50.0
@@ -1233,9 +1330,9 @@ def inject_mobile_css():
     @media (max-width: 640px) {
         .block-container { padding-left: 0.65rem !important; padding-right: 0.65rem !important;
             padding-top: 0.5rem !important; padding-bottom: 5rem !important; }
-        h1 { font-size: 1.2rem !important; }
-        h2 { font-size: 1.05rem !important; }
-        h3 { font-size: 0.95rem !important; }
+        h1 { font-size: 1.2rem !important; margin-bottom: 0.2rem !important; }
+        h2 { font-size: 1.05rem !important; margin-bottom: 0.3rem !important; margin-top: 0.5rem !important; }
+        h3 { font-size: 0.95rem !important; margin-bottom: 0.3rem !important; margin-top: 0.5rem !important; }
         .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0 16px 0; }
         .kpi-card { padding: 12px 14px; }
         .kpi-card .kpi-label { font-size: 0.65rem; }
@@ -1255,11 +1352,11 @@ def inject_mobile_css():
         .js-plotly-plot .annotation-text { font-size: 12px !important; }
         div[role="radiogroup"] { display: flex !important; flex-wrap: wrap !important; gap: 6px !important; }
         div[role="radiogroup"] label {
-            flex: 0 0 auto !important; padding: 6px 12px !important;
+            flex: 0 0 auto !important; padding: 8px 14px !important;
             background: rgba(96,165,250,0.08) !important;
             border: 1px solid rgba(96,165,250,0.25) !important;
-            border-radius: 8px !important; font-size: 0.82rem !important;
-            font-weight: 600 !important; cursor: pointer !important; }
+            border-radius: 8px !important; font-size: 0.85rem !important;
+            font-weight: 600 !important; cursor: pointer !important; min-height: 36px !important; }
         div[role="radiogroup"] label[data-checked="true"] {
             background: rgba(96,165,250,0.35) !important;
             border-color: #60a5fa !important; }
@@ -1273,11 +1370,15 @@ def inject_mobile_css():
         .stButton > button, .stDownloadButton > button {
             padding: 8px 12px !important; font-size: 0.82rem !important;
             min-height: 38px !important; width: 100% !important; }
-        div[data-testid="stPlotlyChart"] { margin-top: 12px !important; }
-        div[data-baseweb="select"] { font-size: 0.85rem !important; }
+        div[data-testid="stPlotlyChart"] { margin: 8px 0 !important; border-radius: 12px !important;
+            overflow: hidden !important; }
+        div[data-baseweb="select"] { font-size: 0.85rem !important; width: 100% !important; }
         div[data-testid="stSlider"] { padding: 6px 0 !important; }
-        details summary { font-size: 0.85rem !important; padding: 8px 12px !important; }
+        details summary { font-size: 0.9rem !important; padding: 10px 12px !important; font-weight: 600 !important; }
+        div[data-testid="stExpander"] { border-radius: 12px !important;
+            border: 1px solid rgba(139,163,192,0.15) !important; }
         div[data-testid="stAlert"] { font-size: 0.78rem !important; padding: 8px 10px !important; }
+        .js-plotly-plot .legend { font-size: 11px !important; }
     }
     @media (max-width: 380px) {
         h1 { font-size: 1.1rem !important; }
@@ -1410,7 +1511,7 @@ def render_kpi_row(scored):
     top_ai = scored.sort_values("AI_Score", ascending=False).head(15)
     if not top_ai.empty: render_horizontal_scroll(top_ai, "⭐ Top AI-Rated Stocks", 15)
 
-def render_screener_tab(scored, registry, project_dir):
+    def render_screener_tab(scored, registry, project_dir):
     with st.expander("🔎 Filters", expanded=False):
         c1, c2 = st.columns(2)
         ms = c1.slider("Min AI Score", 0, 100, 0, 5)
