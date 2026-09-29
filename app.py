@@ -1,13 +1,4 @@
-"""AI Stock Analyzer Pro — v6 Final Complete.
-
-Features:
-  • 15-min auto-refresh (full app)
-  • All chart indicators (SMA/EMA/BB/SuperTrend/VWAP/PSAR + RSI/MACD/Stoch/ADX/ATR/OBV)
-  • Hybrid tab (Risk + Flags + Sectors + Rotation)
-  • Tab reordering with persistence
-  • Mobile-native responsive UI
-  • Bigger fonts, vertical tags, auto-hide filters
-"""
+"""AI Stock Analyzer Pro — v6 Complete."""
 
 from __future__ import annotations
 import concurrent.futures, io, json, logging
@@ -134,7 +125,7 @@ DEFAULT_INDEX_CONSTITUENTS = {
         "BANKBARODA","PNB","IDFCFIRSTB","FEDERALBNK","AUBANK","BANDHANBNK"],
 }
 
-# ============ TAB ORDER PERSISTENCE ============
+# ============ TAB ORDER ============
 def _tab_order_path(p): return p / DATA_DIR_NAME / TAB_ORDER_FILE
 
 def load_tab_order(project_dir):
@@ -153,7 +144,7 @@ def save_tab_order(project_dir, order):
         path = _tab_order_path(project_dir)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"order": order}, indent=2), encoding="utf-8")
-    except OSError as exc: LOGGER.warning("Tab order save failed: %s", exc)
+    except OSError: pass
 
 def render_tab_order_ui(project_dir):
     if "tab_order" not in st.session_state:
@@ -161,7 +152,7 @@ def render_tab_order_ui(project_dir):
     order = st.session_state["tab_order"]
     with st.sidebar:
         with st.expander("📑 Reorder Tabs", expanded=False):
-            st.caption("Use ⬆️/⬇️ to move tabs. Order saves automatically.")
+            st.caption("Use ⬆️/⬇️ to move tabs.")
             for i, key in enumerate(order):
                 c1, c2, c3 = st.columns([6, 1, 1])
                 with c1: st.markdown(f"**{i+1}.** {TAB_META[key]['label']}")
@@ -169,25 +160,23 @@ def render_tab_order_ui(project_dir):
                     if st.button("⬆️", key=f"up_{key}", disabled=(i == 0)):
                         order[i], order[i-1] = order[i-1], order[i]
                         st.session_state["tab_order"] = order
-                        save_tab_order(project_dir, order)
-                        st.rerun()
+                        save_tab_order(project_dir, order); st.rerun()
                 with c3:
                     if st.button("⬇️", key=f"dn_{key}", disabled=(i == len(order)-1)):
                         order[i], order[i+1] = order[i+1], order[i]
                         st.session_state["tab_order"] = order
-                        save_tab_order(project_dir, order)
-                        st.rerun()
+                        save_tab_order(project_dir, order); st.rerun()
             st.divider()
             if st.button("🔄 Reset", use_container_width=True):
                 st.session_state["tab_order"] = DEFAULT_TAB_ORDER.copy()
-                save_tab_order(project_dir, DEFAULT_TAB_ORDER.copy())
-                st.rerun()
+                save_tab_order(project_dir, DEFAULT_TAB_ORDER.copy()); st.rerun()
     return order
 
-# ============ COLUMN NORMALIZATION ============
+# ============ NORMALIZATION ============
 _UNICODE_FIX = str.maketrans({"’":"'","‘":"'","“":'"',"”":'"',"–":"-","—":"-","\u00a0":" "})
 def normalise_columns(df):
     return df.rename(columns={c: str(c).translate(_UNICODE_FIX).strip() for c in df.columns})
+
 def detect_sector_column(df):
     for c in SECTOR_COLUMN_CANDIDATES:
         if c in df.columns: return c
@@ -979,7 +968,6 @@ def _build_subplot_trace(h, kind):
 def render_price_chart(ticker, row=None):
     if go is None or make_subplots is None:
         st.info("`pip install plotly` karein."); return
-
     ovl_key = f"ovl_{ticker}"
     if ovl_key not in st.session_state:
         st.session_state[ovl_key] = ["SMA 20", "SMA 50", "SMA 200"]
@@ -987,37 +975,26 @@ def render_price_chart(ticker, row=None):
         options=list(CHART_OVERLAYS.keys()), default=st.session_state[ovl_key],
         key=f"ms_{ovl_key}")
     st.session_state[ovl_key] = selected_ovl
-
     sub_key = f"sub_{ticker}"
     if sub_key not in st.session_state:
         st.session_state[sub_key] = ["Volume", "RSI"]
     selected_sub = st.multiselect("📉 Subplots", options=CHART_SUBPLOTS,
         default=st.session_state[sub_key], key=f"ms_{sub_key}")
     st.session_state[sub_key] = selected_sub
-
     period_labels = ["1D", "1W", "1M", "3M", "6M", "1Y", "5Y"]
-    period_map = {
-        "1D": ("1d", "5m"), "1W": ("5d", "30m"), "1M": ("1mo", "1d"),
-        "3M": ("3mo", "1d"), "6M": ("6mo", "1d"), "1Y": ("1y", "1d"),
-        "5Y": ("5y", "1d"),
-    }
+    period_map = {"1D": ("1d", "5m"), "1W": ("5d", "30m"), "1M": ("1mo", "1d"),
+                  "3M": ("3mo", "1d"), "6M": ("6mo", "1d"), "1Y": ("1y", "1d"),
+                  "5Y": ("5y", "1d")}
     state_key = f"chart_period_{ticker}"
-    if state_key not in st.session_state:
-        st.session_state[state_key] = "1Y"
-
-    selected = st.radio(
-        "Period", options=period_labels,
+    if state_key not in st.session_state: st.session_state[state_key] = "1Y"
+    selected = st.radio("Period", options=period_labels,
         index=period_labels.index(st.session_state[state_key]),
-        horizontal=True, key=f"radio_{ticker}",
-        label_visibility="collapsed",
-    )
+        horizontal=True, key=f"radio_{ticker}", label_visibility="collapsed")
     st.session_state[state_key] = selected
     period, interval = period_map[selected]
-
     h = _fetch_chart_for_period(ticker, period, interval)
     if h.empty:
         st.warning(f"{ticker} chart data nahi mila."); return
-
     n_sub = len(selected_sub)
     if n_sub > 0:
         heights = [0.55] + [0.45 / n_sub] * n_sub
@@ -1026,12 +1003,9 @@ def render_price_chart(ticker, row=None):
                             subplot_titles=[""] + selected_sub)
     else:
         fig = make_subplots(rows=1, cols=1)
-
-    fig.add_trace(go.Candlestick(
-        x=h.index, open=h["Open"], high=h["High"], low=h["Low"], close=h["Close"],
-        name=ticker, increasing_line_color="#34d399", decreasing_line_color="#fb7185"),
-        row=1, col=1)
-
+    fig.add_trace(go.Candlestick(x=h.index, open=h["Open"], high=h["High"],
+        low=h["Low"], close=h["Close"], name=ticker,
+        increasing_line_color="#34d399", decreasing_line_color="#fb7185"), row=1, col=1)
     for ov_name in selected_ovl:
         meta = CHART_OVERLAYS[ov_name]
         line = _compute_overlay_series(h, meta["kind"], meta.get("window"))
@@ -1049,23 +1023,16 @@ def render_price_chart(ticker, row=None):
         else:
             fig.add_trace(go.Scatter(x=h.index, y=line, mode="lines", name=legend_name,
                 line=dict(color=meta["color"], width=1.8)), row=1, col=1)
-
     for i, sp_name in enumerate(selected_sub, start=2):
         for tr in _build_subplot_trace(h, sp_name):
             fig.add_trace(tr, row=i, col=1)
-
-    fig.update_layout(
-        xaxis_rangeslider_visible=False,
+    fig.update_layout(xaxis_rangeslider_visible=False,
         title=f"{ticker} — {selected} Price Action",
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.05,
-            xanchor="right", x=1,
-            font=dict(size=13, color="#e5eefb", family="sans-serif"),
-            bgcolor="rgba(7,13,24,0.7)", bordercolor="rgba(96,165,250,0.3)",
-            borderwidth=1,
-        ),
-        margin=dict(t=80, b=30, l=20, r=20),
-    )
+        legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="right", x=1,
+                    font=dict(size=13, color="#e5eefb", family="sans-serif"),
+                    bgcolor="rgba(7,13,24,0.7)", bordercolor="rgba(96,165,250,0.3)",
+                    borderwidth=1),
+        margin=dict(t=80, b=30, l=20, r=20))
     fig.update_xaxes(gridcolor="#1c2e45", zerolinecolor="#1c2e45")
     fig.update_yaxes(gridcolor="#1c2e45", zerolinecolor="#1c2e45")
     _style_figure(fig, 500 + n_sub * 130)
@@ -1099,8 +1066,7 @@ def _gauge_chart(value, title):
             "threshold": {"line": {"color": "#ffffff", "width": 2},
                           "thickness": 0.8, "value": value}}))
     fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font={"color": "#8ba3c0"}, height=250,
-        margin={"t": 55, "b": 10, "l": 20, "r": 20})
+        font={"color": "#8ba3c0"}, height=250, margin={"t": 55, "b": 10, "l": 20, "r": 20})
     return fig
 
 def render_technical_analysis(row):
@@ -1125,7 +1091,6 @@ def render_technical_analysis(row):
     c5, c6 = st.columns(2)
     with c5: st.plotly_chart(_gauge_chart(sector_score, "Sector Relative"), use_container_width=True)
     with c6: st.plotly_chart(_gauge_chart(trigger_score, "Entry/Exit Trigger"), use_container_width=True)
-
     st.markdown("### 👥 Analyst Rating")
     ac1, ac2, ac3 = st.columns(3)
     buy_pct = row.get("Percentage Buy Reco's", 0)
@@ -1134,7 +1099,6 @@ def render_technical_analysis(row):
     ac1.metric("Buy %", f"{(buy_pct if pd.notna(buy_pct) else 0):.0f}%")
     ac2.metric("Sell %", f"{(sell_pct if pd.notna(sell_pct) else 0):.0f}%")
     ac3.metric("Analysts", f"{int(n_analysts if pd.notna(n_analysts) else 0)}")
-
     st.markdown("### 📈 Detailed Indicators")
     key_indicators = {
         "CMP": row.get("CMP"), "RSI (14D)": row.get("RSI"),
@@ -1160,32 +1124,29 @@ def render_technical_analysis(row):
     rows_html = ""
     for k, v in key_indicators.items():
         if k not in row.index: continue
-        if pd.isna(v):
-            disp = "—"
-        elif isinstance(v, (int, float, np.number)):
-            disp = f"{float(v):,.2f}"
-        else:
-            disp = str(v)
-        rows_html += f'''
-        <div style="display:flex;justify-content:space-between;padding:8px 12px;
-                    border-bottom:1px solid rgba(139,163,192,0.08);align-items:center;">
-            <span style="color:#8ba3c0;font-size:0.85rem;font-weight:500;">{k}</span>
-            <span style="color:#e5eefb;font-size:1rem;font-weight:700;">{disp}</span>
-        </div>'''
+        if pd.isna(v): disp = "—"
+        elif isinstance(v, (int, float, np.number)): disp = f"{float(v):,.2f}"
+        else: disp = str(v)
+        rows_html += (
+            f'<div style="display:flex;justify-content:space-between;padding:8px 12px;'
+            f'border-bottom:1px solid rgba(139,163,192,0.08);align-items:center;">'
+            f'<span style="color:#8ba3c0;font-size:0.85rem;font-weight:500;">{k}</span>'
+            f'<span style="color:#e5eefb;font-size:1rem;font-weight:700;">{disp}</span></div>'
+        )
     st.markdown(
         f'<div style="background:linear-gradient(145deg,#0d1424 0%,#0a0f1c 100%);'
         f'border:1px solid rgba(139,163,192,0.12);border-radius:12px;padding:6px;'
-        f'margin-top:8px;">{rows_html}</div>',
-        unsafe_allow_html=True
-    )
-
+        f'margin-top:8px;">{rows_html}</div>', unsafe_allow_html=True)
     if "Patterns" in row.index and pd.notna(row.get("Patterns")):
         st.markdown("### 📐 Detected Patterns")
         patterns = str(row.get("Patterns", "")).split(", ")
         pill_html = ""
         for p in patterns:
             if p and p != "—":
-                pill_html += f'<span style="display:inline-block;padding:4px 12px;margin:4px;background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);border-radius:12px;font-size:0.75rem;color:#60a5fa;font-weight:600;">{p}</span>'
+                pill_html += (f'<span style="display:inline-block;padding:4px 12px;margin:4px;'
+                              f'background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);'
+                              f'border-radius:12px;font-size:0.75rem;color:#60a5fa;'
+                              f'font-weight:600;">{p}</span>')
         if pill_html:
             st.markdown(f"<div>{pill_html}</div>", unsafe_allow_html=True)
 
@@ -1232,7 +1193,6 @@ def inject_mobile_css():
     .kpi-card .kpi-delta.up { color: #34d399; }
     .kpi-card .kpi-delta.down { color: #fb7185; }
     .kpi-card .kpi-delta.neutral { color: #fbbf24; }
-
     .stock-card { background: linear-gradient(145deg, #0d1424 0%, #0a0f1c 100%);
         border: 1px solid rgba(139,163,192,0.12); border-radius: 14px; padding: 14px;
         margin-bottom: 10px; position: relative; overflow: hidden; transition: all 0.2s ease; }
@@ -1269,7 +1229,6 @@ def inject_mobile_css():
         border: 1px solid rgba(251,113,133,0.3); }
     .stock-card .stock-action.hold { background: rgba(251,191,36,0.15); color: #fbbf24;
         border: 1px solid rgba(251,191,36,0.3); }
-
     .stock-scroll { display: flex !important; gap: 12px !important; overflow-x: auto !important;
         overflow-y: hidden !important; padding: 4px 0 14px 0 !important;
         scroll-snap-type: x proximity !important; -webkit-overflow-scrolling: touch !important;
@@ -1279,32 +1238,26 @@ def inject_mobile_css():
     .stock-scroll::-webkit-scrollbar-thumb { background: rgba(96,165,250,0.5) !important; border-radius: 4px !important; }
     .stock-scroll .stock-card { min-width: 240px !important; max-width: 240px !important;
         flex: 0 0 240px !important; margin-bottom: 0 !important; }
-
     .section-header { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 8px 0; }
     .section-header h3 { font-size: 1rem !important; font-weight: 700 !important; margin: 0 !important; color: #e5eefb; }
     .section-header .see-all { font-size: 0.75rem; color: #60a5fa; font-weight: 600; }
-
     .js-plotly-plot .legendtext, .js-plotly-plot .legend text {
         font-size: 14px !important; font-weight: 600 !important; }
     .js-plotly-plot .annotation-text { font-size: 13px !important; }
     .js-plotly-plot .xtick text, .js-plotly-plot .ytick text { font-size: 12px !important; }
-
     @media (max-width: 640px) {
         .block-container { padding-left: 0.65rem !important; padding-right: 0.65rem !important;
             padding-top: 0.5rem !important; padding-bottom: 5rem !important; }
         h1 { font-size: 1.2rem !important; }
         h2 { font-size: 1.05rem !important; }
         h3 { font-size: 0.95rem !important; }
-
         .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0 16px 0; }
         .kpi-card { padding: 12px 14px; }
         .kpi-card .kpi-label { font-size: 0.65rem; }
         .kpi-card .kpi-value { font-size: 1.5rem; }
         .kpi-card .kpi-delta { font-size: 0.7rem; }
-
         .stock-scroll .stock-card { min-width: 230px !important; max-width: 230px !important;
             flex: 0 0 230px !important; }
-
         div[data-baseweb="select"] [data-baseweb="tag"] {
             display: block !important; width: 100% !important;
             margin: 3px 0 !important; background: rgba(96,165,250,0.18) !important;
@@ -1312,11 +1265,9 @@ def inject_mobile_css():
             border-radius: 8px !important; padding: 6px 10px !important; }
         div[data-baseweb="select"] [data-baseweb="tag"] span {
             font-size: 0.85rem !important; font-weight: 600 !important; color: #e5eefb !important; }
-
         .js-plotly-plot .legendtext, .js-plotly-plot .legend text {
             font-size: 13px !important; font-weight: 700 !important; }
         .js-plotly-plot .annotation-text { font-size: 12px !important; }
-
         div[role="radiogroup"] { display: flex !important; flex-wrap: wrap !important; gap: 6px !important; }
         div[role="radiogroup"] label {
             flex: 0 0 auto !important; padding: 6px 12px !important;
@@ -1328,34 +1279,27 @@ def inject_mobile_css():
             background: rgba(96,165,250,0.35) !important;
             border-color: #60a5fa !important; }
         div[role="radiogroup"] label input { display: none !important; }
-
         .stTabs [data-baseweb="tab-list"] { overflow-x: auto !important; white-space: nowrap !important;
             scrollbar-width: none !important; }
         .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar { display: none !important; }
         .stTabs [data-baseweb="tab"] { padding: 8px 12px !important; font-size: 0.78rem !important;
             white-space: nowrap !important; flex-shrink: 0 !important; }
-
         div[data-testid="stDataFrame"] * { font-size: 0.72rem !important; }
-
         .stButton > button, .stDownloadButton > button {
             padding: 8px 12px !important; font-size: 0.82rem !important;
             min-height: 38px !important; width: 100% !important; }
-
         div[data-testid="stPlotlyChart"] { margin-top: 12px !important; }
-
         div[data-baseweb="select"] { font-size: 0.85rem !important; }
         div[data-testid="stSlider"] { padding: 6px 0 !important; }
         details summary { font-size: 0.85rem !important; padding: 8px 12px !important; }
         div[data-testid="stAlert"] { font-size: 0.78rem !important; padding: 8px 10px !important; }
     }
-
     @media (max-width: 380px) {
         h1 { font-size: 1.1rem !important; }
         .kpi-card .kpi-value { font-size: 1.3rem; }
         .stock-scroll .stock-card { min-width: 200px !important; max-width: 200px !important;
             flex: 0 0 200px !important; }
     }
-
     @media (min-width: 641px) and (max-width: 1024px) {
         .kpi-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
         .kpi-card .kpi-value { font-size: 1.5rem; }
@@ -1390,17 +1334,19 @@ def render_stock_card_html(row):
     mos_str = f"{mos:+.0f}%" if pd.notna(mos) else "—"
     entry_p = row.get("Entry Trigger Price", 0)
     entry_str = f"₹{entry_p:,.0f}" if pd.notna(entry_p) and entry_p > 0 else "—"
-    return f"""<div class="stock-card {signal_cls}"><div class="stock-header">
-    <div><div class="stock-ticker">{row.get('Ticker','?')}</div>
-    <div class="stock-name">{str(row.get('Name',''))[:28]}</div></div>
-    <div class="stock-score-badge">{ai_score}</div></div>
-    <div class="stock-price-row"><div class="stock-price">{cmp_str}</div>
-    <div class="stock-change {upside_cls}">{upside_str}</div></div>
-    <div class="stock-metrics">
-    <div><div class="stock-metric-label">MoS</div><div class="stock-metric-value">{mos_str}</div></div>
-    <div><div class="stock-metric-label">Entry</div><div class="stock-metric-value">{entry_str}</div></div>
-    <div><div class="stock-metric-label">Signal</div><div class="stock-metric-value">{row.get('AI Signal','—')}</div></div>
-    </div><div class="stock-action {action_cls}">{row.get('Valuation Action','⚪ HOLD')}</div></div>"""
+    return (
+        f'<div class="stock-card {signal_cls}"><div class="stock-header">'
+        f'<div><div class="stock-ticker">{row.get("Ticker","?")}</div>'
+        f'<div class="stock-name">{str(row.get("Name",""))[:28]}</div></div>'
+        f'<div class="stock-score-badge">{ai_score}</div></div>'
+        f'<div class="stock-price-row"><div class="stock-price">{cmp_str}</div>'
+        f'<div class="stock-change {upside_cls}">{upside_str}</div></div>'
+        f'<div class="stock-metrics">'
+        f'<div><div class="stock-metric-label">MoS</div><div class="stock-metric-value">{mos_str}</div></div>'
+        f'<div><div class="stock-metric-label">Entry</div><div class="stock-metric-value">{entry_str}</div></div>'
+        f'<div><div class="stock-metric-label">Signal</div><div class="stock-metric-value">{row.get("AI Signal","—")}</div></div>'
+        f'</div><div class="stock-action {action_cls}">{row.get("Valuation Action","⚪ HOLD")}</div></div>'
+    )
 
 def render_stock_card_grid(df, max_items=20):
     if df.empty: st.info("Koi stock nahi."); return
@@ -1411,9 +1357,10 @@ def render_stock_card_grid(df, max_items=20):
 def render_horizontal_scroll(df, title, max_items=15):
     if df.empty: return
     html = "".join(render_stock_card_html(row) for _, row in df.head(max_items).iterrows())
-    st.markdown(f'<div class="section-header"><h3>{title}</h3>'
-                f'<span class="see-all">{len(df)} total →</span></div>'
-                f'<div class="stock-scroll">{html}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="section-header"><h3>{title}</h3>'
+        f'<span class="see-all">{len(df)} total →</span></div>'
+        f'<div class="stock-scroll">{html}</div>', unsafe_allow_html=True)
 
 def _render_dcf_card(row):
     signal_cls = _signal_class(row.get("AI Signal", "Hold"))
@@ -1423,21 +1370,23 @@ def _render_dcf_card(row):
     mos_cls = "up" if pd.notna(mos) and mos > 0 else "down"
     mos_str = f"{mos:+.1f}%" if pd.notna(mos) else "—"
     ai_score = int(row.get("AI_Score", 0)) if pd.notna(row.get("AI_Score", 0)) else 0
-    return f"""<div class="stock-card {signal_cls}"><div class="stock-header">
-    <div><div class="stock-ticker">{row.get('Ticker','?')}</div>
-    <div class="stock-name">{str(row.get('Name',''))[:30]}</div></div>
-    <div class="stock-score-badge">{ai_score}</div></div>
-    <div class="stock-price-row"><div class="stock-price">{_f(row.get('CMP',0))}</div>
-    <div class="stock-change {mos_cls}">MoS {mos_str}</div></div>
-    <div class="stock-metrics">
-    <div><div class="stock-metric-label">Entry</div><div class="stock-metric-value">{_f(row.get('Entry Trigger Price',0))}</div></div>
-    <div><div class="stock-metric-label">Exit</div><div class="stock-metric-value">{_f(row.get('Exit Trigger Price',0))}</div></div>
-    <div><div class="stock-metric-label">Base IV</div><div class="stock-metric-value">{_f(row.get('Intrinsic Value (Base)',0))}</div></div>
-    </div><div class="stock-metrics">
-    <div><div class="stock-metric-label">DCF IV</div><div class="stock-metric-value">{_f(row.get('Intrinsic Value (DCF)',0))}</div></div>
-    <div><div class="stock-metric-label">Mult IV</div><div class="stock-metric-value">{_f(row.get('Intrinsic Value (Multiples)',0))}</div></div>
-    <div><div class="stock-metric-label">Signal</div><div class="stock-metric-value">{row.get('AI Signal','—')}</div></div>
-    </div><div class="stock-action {action_cls}">{row.get('Valuation Action','⚪ HOLD')}</div></div>"""
+    return (
+        f'<div class="stock-card {signal_cls}"><div class="stock-header">'
+        f'<div><div class="stock-ticker">{row.get("Ticker","?")}</div>'
+        f'<div class="stock-name">{str(row.get("Name",""))[:30]}</div></div>'
+        f'<div class="stock-score-badge">{ai_score}</div></div>'
+        f'<div class="stock-price-row"><div class="stock-price">{_f(row.get("CMP",0))}</div>'
+        f'<div class="stock-change {mos_cls}">MoS {mos_str}</div></div>'
+        f'<div class="stock-metrics">'
+        f'<div><div class="stock-metric-label">Entry</div><div class="stock-metric-value">{_f(row.get("Entry Trigger Price",0))}</div></div>'
+        f'<div><div class="stock-metric-label">Exit</div><div class="stock-metric-value">{_f(row.get("Exit Trigger Price",0))}</div></div>'
+        f'<div><div class="stock-metric-label">Base IV</div><div class="stock-metric-value">{_f(row.get("Intrinsic Value (Base)",0))}</div></div>'
+        f'</div><div class="stock-metrics">'
+        f'<div><div class="stock-metric-label">DCF IV</div><div class="stock-metric-value">{_f(row.get("Intrinsic Value (DCF)",0))}</div></div>'
+        f'<div><div class="stock-metric-label">Mult IV</div><div class="stock-metric-value">{_f(row.get("Intrinsic Value (Multiples)",0))}</div></div>'
+        f'<div><div class="stock-metric-label">Signal</div><div class="stock-metric-value">{row.get("AI Signal","—")}</div></div>'
+        f'</div><div class="stock-action {action_cls}">{row.get("Valuation Action","⚪ HOLD")}</div></div>'
+    )
 
 def _render_dcf_stock_cards(df, max_items=200):
     if df.empty: st.info("Koi stock nahi."); return
@@ -1454,20 +1403,21 @@ def render_kpi_row(scored):
                 .str.contains("DEEP BUY|ENTRY", na=False).sum())
     exit_ = int(scored.get("Valuation Action", pd.Series()).astype(str)
                 .str.contains("EXIT", na=False).sum())
-    st.markdown(f"""<div class="kpi-grid">
-    <div class="kpi-card"><div class="kpi-label">Total Stocks</div>
-    <div class="kpi-value">{total}</div><div class="kpi-delta neutral">Portfolio</div></div>
-    <div class="kpi-card"><div class="kpi-label">Avg AI Score</div>
-    <div class="kpi-value">{avg:.1f}</div><div class="kpi-delta neutral">0-100</div></div>
-    <div class="kpi-card kpi-green"><div class="kpi-label">Entry Triggers</div>
-    <div class="kpi-value">{entry}</div><div class="kpi-delta up">🟢 Buy</div></div>
-    <div class="kpi-card kpi-red"><div class="kpi-label">Exit Triggers</div>
-    <div class="kpi-value">{exit_}</div><div class="kpi-delta down">🔴 Sell</div></div>
-    <div class="kpi-card kpi-amber"><div class="kpi-label">Strong Buys</div>
-    <div class="kpi-value">{sb}</div><div class="kpi-delta neutral">AI ≥ 90</div></div>
-    <div class="kpi-card"><div class="kpi-label">Buy + Strong</div>
-    <div class="kpi-value">{bl}</div><div class="kpi-delta neutral">AI ≥ 80</div></div>
-    </div>""", unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="kpi-grid">'
+        f'<div class="kpi-card"><div class="kpi-label">Total Stocks</div>'
+        f'<div class="kpi-value">{total}</div><div class="kpi-delta neutral">Portfolio</div></div>'
+        f'<div class="kpi-card"><div class="kpi-label">Avg AI Score</div>'
+        f'<div class="kpi-value">{avg:.1f}</div><div class="kpi-delta neutral">0-100</div></div>'
+        f'<div class="kpi-card kpi-green"><div class="kpi-label">Entry Triggers</div>'
+        f'<div class="kpi-value">{entry}</div><div class="kpi-delta up">🟢 Buy</div></div>'
+        f'<div class="kpi-card kpi-red"><div class="kpi-label">Exit Triggers</div>'
+        f'<div class="kpi-value">{exit_}</div><div class="kpi-delta down">🔴 Sell</div></div>'
+        f'<div class="kpi-card kpi-amber"><div class="kpi-label">Strong Buys</div>'
+        f'<div class="kpi-value">{sb}</div><div class="kpi-delta neutral">AI ≥ 90</div></div>'
+        f'<div class="kpi-card"><div class="kpi-label">Buy + Strong</div>'
+        f'<div class="kpi-value">{bl}</div><div class="kpi-delta neutral">AI ≥ 80</div></div>'
+        f'</div>', unsafe_allow_html=True)
     entry_df = scored[scored.get("Valuation Action", pd.Series()).astype(str)
                       .str.contains("DEEP BUY|ENTRY", na=False)].sort_values(
                       "Margin of Safety %", ascending=False)
@@ -1498,7 +1448,8 @@ def render_screener_tab(scored, registry, project_dir):
     if view_mode == "📇 Cards":
         if not f.empty:
             col1, col2 = st.columns(2)
-            sort_by = col1.selectbox("Sort by", ["AI_Score","Margin of Safety %","Upside %","Sharpe"], key="card_sort")
+            sort_by = col1.selectbox("Sort by",
+                ["AI_Score","Margin of Safety %","Upside %","Sharpe"], key="card_sort")
             max_cards = col2.slider("Max cards", 5, 50, 20, 5, key="max_cards")
             render_stock_card_grid(f.sort_values(sort_by, ascending=False, na_position="last"), max_cards)
     else:
@@ -1540,14 +1491,21 @@ def render_dcf_valuation_tab(scored):
     ov = int((val["Margin of Safety %"] <= -10).sum())
     am = val["Margin of Safety %"].mean()
     aw = val["WACC Used"].mean() if "WACC Used" in val else np.nan
-    st.markdown(f"""<div class="kpi-grid">
-    <div class="kpi-card kpi-green"><div class="kpi-label">🟢 Deep Value</div><div class="kpi-value">{dv}</div></div>
-    <div class="kpi-card kpi-green"><div class="kpi-label">🟢 Undervalued</div><div class="kpi-value">{uv}</div></div>
-    <div class="kpi-card kpi-amber"><div class="kpi-label">⚪ Fair</div><div class="kpi-value">{fv}</div></div>
-    <div class="kpi-card kpi-red"><div class="kpi-label">🔴 Overvalued</div><div class="kpi-value">{ov}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Avg MoS</div><div class="kpi-value">{am:+.1f}%</div></div>
-    <div class="kpi-card"><div class="kpi-label">Avg WACC</div><div class="kpi-value">{f"{aw:.1%}" if pd.notna(aw) else "—"}</div></div>
-    </div>""", unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="kpi-grid">'
+        f'<div class="kpi-card kpi-green"><div class="kpi-label">🟢 Deep Value</div>'
+        f'<div class="kpi-value">{dv}</div></div>'
+        f'<div class="kpi-card kpi-green"><div class="kpi-label">🟢 Undervalued</div>'
+        f'<div class="kpi-value">{uv}</div></div>'
+        f'<div class="kpi-card kpi-amber"><div class="kpi-label">⚪ Fair</div>'
+        f'<div class="kpi-value">{fv}</div></div>'
+        f'<div class="kpi-card kpi-red"><div class="kpi-label">🔴 Overvalued</div>'
+        f'<div class="kpi-value">{ov}</div></div>'
+        f'<div class="kpi-card"><div class="kpi-label">Avg MoS</div>'
+        f'<div class="kpi-value">{am:+.1f}%</div></div>'
+        f'<div class="kpi-card"><div class="kpi-label">Avg WACC</div>'
+        f'<div class="kpi-value">{f"{aw:.1%}" if pd.notna(aw) else "—"}</div></div>'
+        f'</div>', unsafe_allow_html=True)
     st.divider()
     st.markdown("### 🎯 Trigger Alerts by Valuation Signal")
     sig_order = ["🟢 Deep Value", "🟢 Undervalued", "🟡 Slightly Under", "⚪ Fair Value",
@@ -1557,7 +1515,8 @@ def render_dcf_valuation_tab(scored):
         sig_tabs = st.tabs([f"{s} ({int((val['Valuation Signal'] == s).sum())})" for s in existing])
         for tab, sig in zip(sig_tabs, existing):
             with tab:
-                sub = val[val["Valuation Signal"] == sig].sort_values("Margin of Safety %", ascending=False)
+                sub = val[val["Valuation Signal"] == sig].sort_values(
+                    "Margin of Safety %", ascending=False)
                 if sub.empty: st.info("No stocks.")
                 else: _render_dcf_stock_cards(sub, 200)
     st.divider()
@@ -1588,8 +1547,8 @@ def render_dcf_valuation_tab(scored):
             .map(style_valuation, subset=["Valuation Signal"])
             .map(style_valuation, subset=["Valuation Action"])
             .map(style_signal, subset=["AI Signal"])
-            .format({"CMP": "₹{:,.2f}", "Margin of Safety %": "{:+.2f}%", "AI_Score": "{:.0f}"},
-                    na_rep="—"),
+            .format({"CMP": "₹{:,.2f}", "Margin of Safety %": "{:+.2f}%",
+                     "AI_Score": "{:.0f}"}, na_rep="—"),
             use_container_width=True, hide_index=True, height=560)
     with chart_tab:
         if go is not None:
@@ -1763,109 +1722,6 @@ def render_quality_tab(scored):
     fok = int((scored.get("Fetch Status", pd.Series()) == "OK").sum())
     sc = detect_sector_column(scored)
     val_ok = scored.get('Intrinsic Value (Base)', pd.Series()).notna().sum()
-    st.markdown(f"""<div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr);">
-    <div class="kpi-card"><div class="kpi-label">Total</div><div class="kpi-value">{tot}</div></div>
-    <div class="kpi-card kpi-green"><div class="kpi-label">Fetch OK</div><div class="kpi-value">{fok}/{tot}</div></div>
-    <div class="kpi-card kpi-amber"><div class="kpi-label">Sector Data</div><div class="kpi-value">{scored[sc].notna().sum() if sc else 0}/{tot}</div></div>
-    <div class="kpi-card kpi-green"><div class="kpi-label">Valuation OK</div><div class="kpi-value">{val_ok}/{tot}</div></div>
-    </div>""", unsafe_allow_html=True)
-
-# ============ EXCEL EXPORT ============
-def _build_excel(scored, ss, rot, idf):
-    buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as w:
-        scored.to_excel(w, sheet_name="Screener", index=False)
-        if not ss.empty: ss.to_excel(w, sheet_name="Sectors", index=False)
-        if not rot.empty: rot.to_excel(w, sheet_name="Rotation", index=False)
-        if not idf.empty: idf.to_excel(w, sheet_name="Indices", index=False)
-    return buf.getvalue()
-
-# ============ DASHBOARD ============
-def render_dashboard(scored, registry, project_dir):
-    render_kpi_row(scored)
-    st.divider()
-    order = st.session_state.get("tab_order", DEFAULT_TAB_ORDER)
-    labels = [TAB_META[k]["label"] for k in order]
-    tabs = st.tabs(labels)
-    for tab, key in zip(tabs, order):
-        with tab:
-            try:
-                if key == "screener": render_screener_tab(scored, registry, project_dir)
-                elif key == "dcf": render_dcf_valuation_tab(scored)
-                elif key == "deep": render_deep_tab(scored)
-                elif key == "hybrid": render_hybrid_tab(scored, project_dir)
-                elif key == "trade": render_trade_tab(scored)
-                elif key == "peers": render_peer_tab(scored)
-                elif key == "indices": render_index_tab(scored, registry)
-                elif key == "patterns": render_patterns_tab(scored)
-                elif key == "quality": render_quality_tab(scored)
-            except Exception as exc:
-                st.error(f"Error in {key}: {exc}")
-
-# ============ SIDEBAR ============
-def render_sidebar(project_dir):
-    with st.sidebar:
-        st.header("📁 Data Sources")
-        st.caption("Upload
-def render_sidebar(project_dir):
-    with st.sidebar:
-        st.header("📁 Data Sources")
-        st.caption("Upload CSVs — data/ folder me save honge.")
-        fu = st.file_uploader("Nifty Fundamentals CSV", type=["csv"], key="f")
-        tu = st.file_uploader("Explore Promising CSV", type=["csv"], key="t")
-    return fu, tu
-
-
-# ============ MAIN ============
-def main():
-    st.set_page_config(page_title=APP_TITLE, page_icon="📈", layout="wide",
-                       initial_sidebar_state="collapsed")
-    inject_mobile_css()
-
-    if AUTOREFRESH_AVAILABLE:
-        refresh_count = st_autorefresh(interval=AUTO_REFRESH_MIN * 60 * 1000,
-                                       limit=None, key="auto_refresh_tick")
-        if refresh_count % 4 == 0 and refresh_count > 0:
-            st.cache_data.clear()
-    else:
-        refresh_count = 0
-
-    st.title(f"📈 {APP_TITLE}")
-    st.caption("10-dim AI Score + Hybrid DCF + Entry/Exit Triggers.")
-
-    project_dir = Path(__file__).parent
-    registry = load_index_constituents(project_dir)
-    fu, tu = render_sidebar(project_dir)
-
-    order = render_tab_order_ui(project_dir)
-
-    with st.sidebar:
-        st.divider()
-        if AUTOREFRESH_AVAILABLE:
-            st.caption(f"🔄 Auto-refresh: every {AUTO_REFRESH_MIN} min")
-            st.caption(f"⏱️ Last tick: #{refresh_count}")
-        else:
-            st.caption("⚠️ Auto-refresh off")
-        st.caption(f"🕐 Loaded: {datetime.now():%H:%M:%S}")
-
-    if fu: persist_uploaded_csv(fu, FUNDAMENTAL_PREFIX, project_dir)
-    if tu: persist_uploaded_csv(tu, TECHNICAL_PREFIX, project_dir)
-    try:
-        fund = read_csv_source(fu, find_latest_csv(project_dir, FUNDAMENTAL_PREFIX), "Fundamentals")
-        _ = read_csv_source(tu, find_latest_csv(project_dir, TECHNICAL_PREFIX), "Technicals")
-    except (FileNotFoundError, ValueError) as exc:
-        st.error(str(exc)); st.stop()
-    tickers = fund["Ticker"].dropna().unique().tolist()
-    st.info(f"📥 {len(tickers)} tickers ka data fetch ho raha hai...")
-    tech = fetch_technicals(tickers)
-    try:
-        merged = merge_sources(fund, tech)
-    except ValueError as exc:
-        st.error(str(exc)); st.stop()
-    with st.spinner("Scoring + valuation compute ho rahe hain..."):
-        scored = build_scores(merged, registry)
-    render_dashboard(scored, registry, project_dir)
-
-
-if __name__ == "__main__":
-    main()
+    st.markdown(
+        f'<div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr);">'
+       
