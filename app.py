@@ -1,9 +1,7 @@
-"""AI Stock Analyzer Pro — Hybrid DCF + Entry/Exit Triggers (Mobile Optimized).
+"""AI Stock Analyzer Pro — Mobile Native Feel Edition.
 
-10-dimension AI Score with trigger system:
-  • Technical 16% | Fundamental 16% | Sector-Rel 9% | Rank 12%
-  • CSV-Tech 10% | Analyst 6% | CashFlow 5% | Sharpe 4%
-  • DCF Valuation 10% | Trigger Score 12%
+10-dimension AI Score + Hybrid DCF + Entry/Exit Triggers.
+Bulletproof mobile CSS with 2-per-row KPI cards, native app feel.
 """
 
 from __future__ import annotations
@@ -236,7 +234,6 @@ def calculate_enhanced_2stage_dcf(frame):
     capex = numeric_column(frame, "Capital Expenditure").abs()
     derived_fcf = ocf - capex
     fcf = fcf.where(fcf.notna() & fcf.gt(0), derived_fcf)
-
     debt = numeric_column(frame, "Total Debt", 0).fillna(0)
     cash = numeric_column(frame, "Cash and Equivalent", 0).fillna(0)
     mcap = numeric_column(frame, "Market Cap")
@@ -244,28 +241,22 @@ def calculate_enhanced_2stage_dcf(frame):
     shares = numeric_column(frame, "Common Shares Outstanding")
     fallback = mcap.div(close.where(close.gt(0)))
     shares = shares.where(shares.gt(0), fallback).where(lambda s: s.gt(0))
-
     beta = numeric_column(frame, "Beta", 1.0).fillna(1.0).clip(0.5, 2.0)
     wacc = (RISK_FREE_RATE + beta * EQUITY_RISK_PREMIUM).clip(0.10, 0.14)
-
     g_hist = numeric_column(frame, "5Y Historical EPS Growth", 10).fillna(10).clip(5, 20) / 100
     g_near, g_far = g_hist, g_hist * 0.5
-
     pv_fcf = pd.Series(0.0, index=frame.index)
     cur = fcf.copy()
     for year in range(1, 11):
         g = g_near if year <= 5 else g_far
         cur = cur * (1 + g)
         pv_fcf += cur / ((1 + wacc) ** year)
-
     terminal_fcf = cur * (1 + TERMINAL_GROWTH)
     terminal_value = terminal_fcf / (wacc - TERMINAL_GROWTH).replace(0, np.nan)
     pv_terminal = terminal_value / ((1 + wacc) ** 10)
-
     ev = pv_fcf + pv_terminal
     eq = ev - debt + cash
     intrinsic = eq / shares.where(shares.gt(0))
-
     sector_col = detect_sector_column(frame)
     if sector_col:
         is_fin = _is_financial_sector(frame, sector_col)
@@ -274,14 +265,10 @@ def calculate_enhanced_2stage_dcf(frame):
         pb_med = pb.where(~is_fin).median()
         if pd.notna(pb_med) and pb_med > 0:
             intrinsic = intrinsic.where(~is_fin, bvps * pb_med)
-
     valid = fcf.gt(0) & shares.gt(0) & intrinsic.notna() & intrinsic.gt(0)
     intrinsic = intrinsic.where((intrinsic > close * 0.2) & (intrinsic < close * 5))
-
-    return pd.DataFrame({
-        "DCF Base": intrinsic.where(valid),
-        "WACC Used": wacc.where(valid),
-    }, index=frame.index)
+    return pd.DataFrame({"DCF Base": intrinsic.where(valid),
+                         "WACC Used": wacc.where(valid)}, index=frame.index)
 
 def calculate_peer_multiples(frame, sector_col="Sub-Sector"):
     empty = pd.DataFrame({"Multiples Base": np.nan}, index=frame.index)
@@ -292,15 +279,12 @@ def calculate_peer_multiples(frame, sector_col="Sub-Sector"):
     pe = numeric_column(frame, "PE Ratio")
     pb = numeric_column(frame, "PB Ratio")
     ev = numeric_column(frame, "EV/EBITDA Ratio")
-
     eps = close / pe.where(pe.gt(0))
     bvps = close / pb.where(pb.gt(0))
     ebitda_ps = close / ev.where(ev.gt(0))
-
     pe_med = pe.groupby(sectors).transform("median")
     pb_med = pb.groupby(sectors).transform("median")
     ev_med = ev.groupby(sectors).transform("median")
-
     vals = [(ebitda_ps * ev_med, 0.5), (eps * pe_med, 0.3), (bvps * pb_med, 0.2)]
     ws = pd.Series(0.0, index=frame.index)
     wt = pd.Series(0.0, index=frame.index)
@@ -315,15 +299,12 @@ def calculate_peer_multiples(frame, sector_col="Sub-Sector"):
 def calculate_hybrid_valuation(frame):
     dcf = calculate_enhanced_2stage_dcf(frame)
     mult = calculate_peer_multiples(frame)
-
     dcf_base = dcf["DCF Base"]
     mult_base = mult["Multiples Base"]
     blended = dcf_base * 0.6 + mult_base * 0.4
     blended = blended.fillna(dcf_base).fillna(mult_base)
-
     has_both = dcf_base.notna() & mult_base.notna()
     band = pd.Series(VALUATION_BAND, index=frame.index).where(has_both, 0.20)
-
     return pd.DataFrame({
         "Intrinsic Value (DCF)": dcf_base,
         "Intrinsic Value (Multiples)": mult_base,
@@ -348,11 +329,9 @@ def calculate_valuation_trigger_score(frame):
     base = numeric_column(frame, "Intrinsic Value (Base)")
     upper = numeric_column(frame, "Upper Intrinsic Value")
     mid = (base + upper) / 2
-
     score = pd.Series(np.select(
         [cmp.le(lower * 0.95), cmp.le(lower), cmp.le(base), cmp.le(mid), cmp.le(upper)],
         [100, 90, 70, 55, 35], default=10), index=frame.index)
-
     valid = cmp.notna() & lower.notna() & base.notna() & upper.notna()
     return score.where(valid, 50)
 
@@ -457,7 +436,6 @@ def _compute_indicators(data):
     close, high, low, volume = data["Close"], data["High"], data["Low"], data["Volume"]
     if len(data) < 200 or not np.isfinite(close.iloc[-1]) or close.iloc[-1] <= 0:
         return {"Technical_Score": 50.0}
-
     sma = {n: close.rolling(n).mean() for n in (20, 50, 200)}
     ema = {n: close.ewm(span=n, adjust=False).mean() for n in (20, 50, 200)}
     delta = close.diff()
@@ -481,7 +459,6 @@ def _compute_indicators(data):
     mid = close.rolling(20).mean()
     dev = close.rolling(20).std(ddof=0) * 2
     up, lo = mid + dev, mid - dev
-
     bu = ((high + low) / 2 + 3 * atr).to_numpy()
     bl = ((high + low) / 2 - 3 * atr).to_numpy()
     fu, fl = bu.copy(), bl.copy()
@@ -495,7 +472,6 @@ def _compute_indicators(data):
         if d[i-1] < 0 and c[i] > fu[i]: d[i] = 1
         elif d[i-1] > 0 and c[i] < fl[i]: d[i] = -1
         else: d[i] = d[i-1]
-
     st_val = pd.Series(fl, index=data.index).where(
         pd.Series(d, index=data.index).gt(0), pd.Series(fu, index=data.index))
     direction = pd.Series(d, index=data.index)
@@ -503,7 +479,6 @@ def _compute_indicators(data):
     cmp = float(close.iloc[-1])
     pivot = float((prev["High"] + prev["Low"] + prev["Close"]) / 3)
     hr = float(prev["High"] - prev["Low"])
-
     ts = 0
     if sma[20].iloc[-1] > sma[50].iloc[-1] > sma[200].iloc[-1]: ts += 40
     elif sma[20].iloc[-1] > sma[50].iloc[-1]: ts += 25
@@ -517,7 +492,6 @@ def _compute_indicators(data):
     elif adx_v >= 30: ts += 8
     elif adx_v >= 25: ts += 6
     elif adx_v >= 20: ts += 3
-
     rsi_v = rsi.iloc[-1]
     ms_val = (30 if 55 <= rsi_v <= 70 else 20 if rsi_v >= 50 else 10 if rsi_v >= 40 else 0)
     if ml.iloc[-1] > ms.iloc[-1]: ms_val += 40
@@ -530,7 +504,6 @@ def _compute_indicators(data):
     vol_s = 100 if ap <= 1.5 else 70 if ap <= 2.5 else 40 if ap <= 4 else 10
     sr_s = 100 if cmp > pivot else 40
     tech = (ts + ms_val + vs + vol_s + sr_s) / 5
-
     return {"CMP": cmp, "20 DMA": float(sma[20].iloc[-1]), "50 DMA": float(sma[50].iloc[-1]),
         "200 DMA": float(sma[200].iloc[-1]), "RSI": float(rsi_v),
         "EMA20": float(ema[20].iloc[-1]), "EMA50": float(ema[50].iloc[-1]),
@@ -704,14 +677,12 @@ def _kelly_lite(ai, rr, cf):
 def build_scores(frame, index_registry):
     out = frame.copy()
     sector_col = detect_sector_column(out)
-
     out["Fundamental_Score_AI"] = calculate_fundamental_score(out)
     out["Sector_Relative_Score"] = calculate_sector_relative_score(out, sector_col or "Sector")
     out["Rank_Composite"] = calculate_rank_composite(out)
     out["Analyst_Consensus_Score"] = calculate_analyst_consensus(out)
     out["CashFlow_Quality_Score"] = calculate_cashflow_quality(out)
     out["CSV_Technical_Score"] = calculate_csv_technical_score(out)
-
     val = calculate_hybrid_valuation(out)
     out["Intrinsic Value (DCF)"] = val["Intrinsic Value (DCF)"]
     out["Intrinsic Value (Multiples)"] = val["Intrinsic Value (Multiples)"]
@@ -721,17 +692,14 @@ def build_scores(frame, index_registry):
     out["WACC Used"] = val["WACC Used"]
     out["DCF_Valuation_Score"] = calculate_valuation_score(out)
     out["Valuation_Trigger_Score"] = calculate_valuation_trigger_score(out)
-
     cmp_now = numeric_column(out, "CMP")
     lower_now = numeric_column(out, "Lower Intrinsic Value")
     upper_now = numeric_column(out, "Upper Intrinsic Value")
     base_now = numeric_column(out, "Intrinsic Value (Base)")
-
     out["Entry Trigger Price"] = lower_now.round(2)
     out["Exit Trigger Price"] = upper_now.round(2)
     out["To Entry %"] = (((lower_now - cmp_now) / cmp_now.where(cmp_now.gt(0))) * 100).round(2)
     out["To Exit %"] = (((upper_now - cmp_now) / cmp_now.where(cmp_now.gt(0))) * 100).round(2)
-
     out["Valuation Action"] = np.select(
         [cmp_now.le(lower_now * 0.95), cmp_now.le(lower_now),
          cmp_now.le(base_now), cmp_now.le((base_now + upper_now) / 2),
@@ -739,10 +707,8 @@ def build_scores(frame, index_registry):
         ["🟢🟢🟢 DEEP BUY", "🟢🟢 ENTRY TRIGGER", "🟢 ACCUMULATE",
          "⚪ FAIR / HOLD", "🟠 STRETCHED"],
         default="🔴 EXIT TRIGGER")
-
     tech = numeric_column(out, "Technical_Score", 50).fillna(50)
     sharpe_n = numeric_column(out, "Sharpe", 0).fillna(0).clip(-2, 3).add(2).mul(20).clip(0, 100)
-
     out["AI_Score"] = (
         tech * 0.16 + out["Fundamental_Score_AI"] * 0.16
         + out["Sector_Relative_Score"] * 0.09 + out["Rank_Composite"] * 0.12
@@ -751,17 +717,14 @@ def build_scores(frame, index_registry):
         + out["DCF_Valuation_Score"] * 0.10
         + out["Valuation_Trigger_Score"] * 0.12
     ).round().astype(int)
-
     out["AI Signal"] = np.select(
         [out["AI_Score"].ge(90), out["AI_Score"].ge(80), out["AI_Score"].ge(70),
          out["AI_Score"].ge(60), out["AI_Score"].ge(40)],
         ["Strong Buy", "Buy", "Accumulate", "Hold", "Reduce"], default="Sell")
-
     stacked = pd.concat([tech, out["Fundamental_Score_AI"], out["Sector_Relative_Score"],
                          out["Rank_Composite"], out["DCF_Valuation_Score"],
                          out["Valuation_Trigger_Score"]], axis=1)
     out["AI Confidence"] = (100 - stacked.std(axis=1).fillna(0) * 1.5).clip(0, 100).round()
-
     out["Safety Score"] = (
         out["Fundamental_Score_AI"] * 0.24 + tech * 0.18
         + out["Sector_Relative_Score"] * 0.09 + out["Rank_Composite"] * 0.11
@@ -773,11 +736,9 @@ def build_scores(frame, index_registry):
     out["Risk Level"] = np.select(
         [out["Risk Score"].lt(25), out["Risk Score"].lt(50), out["Risk Score"].lt(75)],
         ["Low Risk", "Moderate Risk", "High Risk"], default="Very High Risk")
-
     ms = out["Ticker"].map(lambda t: classify_index_membership(t, index_registry))
     out["Index Memberships"] = ms.map(lambda l: ", ".join(l))
     out["Primary Index"] = ms.map(lambda l: l[0])
-
     cmp = numeric_column(out, "CMP")
     stv = numeric_column(out, "SuperTrend_Val")
     atr = numeric_column(out, "ATR")
@@ -792,7 +753,6 @@ def build_scores(frame, index_registry):
     rps = cmp - out["Stop Loss"]
     out["Risk : Reward"] = ((out["Target Price"] - cmp) / rps.where(rps.gt(0))).round(2)
     out["Trailing Stop"] = (cmp - 3 * atr).where(atr.gt(0), out["Stop Loss"])
-
     iv = out["Intrinsic Value (Base)"]
     out["Margin of Safety %"] = ((iv - cmp) / iv.where(iv.gt(0)) * 100).round(2)
     mos = out["Margin of Safety %"]
@@ -801,7 +761,6 @@ def build_scores(frame, index_registry):
         ["🟢 Deep Value", "🟢 Undervalued", "🟡 Slightly Under", "⚪ Fair Value",
          "🟠 Slightly Over", "🔴 Overvalued"],
         default="🔴 Highly Overvalued")
-
     out = build_flag_summary(out)
     out["Position Size %"] = _kelly_lite(out["AI_Score"], out["Risk : Reward"].fillna(0),
                                          out["AI Confidence"])
@@ -891,7 +850,6 @@ def compute_sector_rotation(project_dir, current_stats):
     if "Sector" in missing: return pd.DataFrame()
     cur = current_stats.copy()
     for c in missing: cur[c] = np.nan
-
     hist = load_sector_snapshots(project_dir, 90)
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     base = pd.DataFrame({"Sector": cur["Sector"].values,
@@ -981,119 +939,168 @@ def style_valuation(v):
 def fmt_money(v):
     return f"₹{v:,.2f}" if pd.notna(v) and v > 0 else "—"
 
-# ============= MOBILE RESPONSIVE CSS INJECTOR =============
+# ============= MOBILE RESPONSIVE CSS =============
 def inject_mobile_css():
-    """Applies mobile-friendly CSS. Called once per session."""
+    """Bulletproof mobile-native CSS across all screen sizes."""
     st.markdown("""
     <style>
-    /* ========== GLOBAL ========== */
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
     .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-        max-width: 100%;
+        padding-top: 1rem !important;
+        padding-bottom: 2rem !important;
+        max-width: 100% !important;
     }
-    h1 {
-        font-size: 2rem !important;
-        font-weight: 700 !important;
+    button, [role="button"], .stButton > button,
+    .stDownloadButton > button, [data-testid="stTab"] {
+        -webkit-tap-highlight-color: transparent;
+        transition: all 0.15s ease;
     }
-    h2, h3 {
-        font-size: 1.3rem !important;
-    }
+    body, .main, section.main { overflow-x: hidden !important; }
 
-    /* ========== MOBILE (< 768px) ========== */
-    @media (max-width: 768px) {
-        /* Reduce outer padding for more content space */
+    @media (max-width: 640px) {
         .block-container {
-            padding-top: 0.8rem !important;
-            padding-bottom: 0.8rem !important;
-            padding-left: 0.4rem !important;
-            padding-right: 0.4rem !important;
+            padding-left: 0.6rem !important;
+            padding-right: 0.6rem !important;
+            padding-top: 0.5rem !important;
         }
+        h1 { font-size: 1.3rem !important; line-height: 1.25 !important;
+             margin-bottom: 0.3rem !important; }
+        h2 { font-size: 1.1rem !important; line-height: 1.3 !important; }
+        h3 { font-size: 1rem !important; }
 
-        /* Smaller headings */
-        h1 {
-            font-size: 1.4rem !important;
-            line-height: 1.3 !important;
-        }
-        h2, h3 {
-            font-size: 1.05rem !important;
-            line-height: 1.3 !important;
-        }
-
-        /* KPI cards — force 2 per row */
-        [data-testid="stHorizontalBlock"] {
+        /* KPI CARDS: force 2-per-row */
+        div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
             flex-wrap: wrap !important;
-            gap: 0.4rem !important;
+            gap: 6px !important;
+            width: 100% !important;
         }
-        [data-testid="column"] {
-            width: calc(50% - 0.2rem) !important;
-            flex: 1 1 calc(50% - 0.2rem) !important;
-            min-width: calc(50% - 0.2rem) !important;
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+        div[data-testid="stHorizontalBlock"] > div,
+        div[data-testid="column"],
+        [data-testid="stColumn"] {
+            flex: 0 0 calc(50% - 3px) !important;
+            min-width: calc(50% - 3px) !important;
+            max-width: calc(50% - 3px) !important;
+            width: calc(50% - 3px) !important;
         }
-
-        /* Metric text size */
-        [data-testid="stMetricValue"] {
-            font-size: 1.2rem !important;
+        div[data-testid="stMetric"] {
+            padding: 6px 8px !important;
+            border-radius: 8px !important;
+            background: rgba(255,255,255,0.02) !important;
+        }
+        div[data-testid="stMetricValue"] {
+            font-size: 1.15rem !important;
             line-height: 1.2 !important;
+            font-weight: 700 !important;
         }
-        [data-testid="stMetricLabel"] {
-            font-size: 0.75rem !important;
-            line-height: 1.2 !important;
-        }
-        [data-testid="stMetricDelta"] {
+        div[data-testid="stMetricLabel"],
+        div[data-testid="stMetricLabel"] * {
             font-size: 0.7rem !important;
+            line-height: 1.2 !important;
+            opacity: 0.85 !important;
         }
+        div[data-testid="stMetricDelta"] { font-size: 0.65rem !important; }
 
-        /* Dataframes horizontal scroll */
-        [data-testid="stDataFrame"] {
-            overflow-x: auto !important;
-            font-size: 0.8rem !important;
+        section[data-testid="stSidebar"] {
+            min-width: 82% !important;
+            max-width: 88% !important;
         }
-        [data-testid="stDataFrame"] div[role="gridcell"] {
-            font-size: 0.75rem !important;
-            padding: 4px 6px !important;
-        }
+        section[data-testid="stSidebar"] > div { padding: 0.5rem !important; }
 
-        /* Tabs — horizontal scroll */
         .stTabs [data-baseweb="tab-list"] {
             overflow-x: auto !important;
+            overflow-y: hidden !important;
             white-space: nowrap !important;
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
             padding-bottom: 4px !important;
-            gap: 2px !important;
+            gap: 0 !important;
         }
+        .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar { display: none !important; }
         .stTabs [data-baseweb="tab"] {
             padding: 6px 10px !important;
-            font-size: 0.8rem !important;
+            font-size: 0.78rem !important;
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
         }
+        .stTabs [data-baseweb="tab"] p { font-size: 0.78rem !important; }
 
-        /* Sidebar toggle */
-        [data-testid="stSidebar"] {
-            min-width: 80% !important;
-            max-width: 85% !important;
+        div[data-testid="stDataFrame"],
+        div[data-testid="stDataFrameResizable"] {
+            overflow-x: auto !important;
+            font-size: 0.72rem !important;
         }
-
-        /* Buttons */
-        .stButton > button {
-            padding: 6px 12px !important;
-            font-size: 0.8rem !important;
+        div[data-testid="stDataFrame"] * { font-size: 0.72rem !important; }
+        div[data-testid="stDataFrame"] [role="columnheader"] {
+            font-size: 0.7rem !important;
+            padding: 4px 6px !important;
         }
-
-        /* Expander */
+        div[data-testid="stDataFrame"] [role="gridcell"] {
+            padding: 3px 6px !important;
+        }
+        .stButton > button, .stDownloadButton > button {
+            padding: 8px 12px !important;
+            font-size: 0.78rem !important;
+            min-height: 38px !important;
+            width: 100% !important;
+        }
+        section[data-testid="stFileUploaderDropzone"] { padding: 6px !important; }
         details summary {
-            font-size: 0.9rem !important;
+            font-size: 0.82rem !important;
+            padding: 6px 10px !important;
         }
+        .js-plotly-plot, .plot-container { max-height: 340px !important; }
+        div[data-testid="stSlider"] { padding: 4px 0 !important; }
+        div[data-testid="stAlert"] {
+            font-size: 0.75rem !important;
+            padding: 8px 10px !important;
+        }
+        div[data-baseweb="select"] { font-size: 0.78rem !important; }
+        div.element-container { margin-bottom: 0.3rem !important; }
+        hr { margin: 0.5rem 0 !important; }
+        footer { display: none !important; }
+        .stTabs { margin-top: 0.5rem !important; }
+        button[kind="header"] { padding: 4px !important; }
+    }
 
-        /* Plotly charts — reduce height */
-        .js-plotly-plot {
-            max-height: 350px !important;
+    @media (max-width: 380px) {
+        h1 { font-size: 1.15rem !important; }
+        div[data-testid="stMetricValue"] { font-size: 1rem !important; }
+        div[data-testid="stMetricLabel"],
+        div[data-testid="stMetricLabel"] * { font-size: 0.65rem !important; }
+        .stTabs [data-baseweb="tab"] {
+            padding: 5px 8px !important;
+            font-size: 0.72rem !important;
         }
     }
 
-    /* ========== TABLET (768-1024) ========== */
-    @media (min-width: 769px) and (max-width: 1024px) {
-        [data-testid="column"] {
-            min-width: 30% !important;
+    @media (min-width: 641px) and (max-width: 1024px) {
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
+        div[data-testid="column"] {
+            flex: 0 0 calc(33.33% - 4px) !important;
+            min-width: calc(33.33% - 4px) !important;
+            max-width: calc(33.33% - 4px) !important;
         }
+        div[data-testid="stMetricValue"] { font-size: 1.3rem !important; }
+        h1 { font-size: 1.7rem !important; }
+    }
+
+    @media (min-width: 1025px) {
+        .block-container {
+            padding-left: 3rem !important;
+            padding-right: 3rem !important;
+        }
+    }
+
+    div[data-testid="stMetric"] {
+        border: 1px solid rgba(139, 163, 192, 0.12) !important;
+        border-radius: 10px !important;
+        transition: all 0.2s ease;
+    }
+    div[data-testid="stMetric"]:active {
+        transform: scale(0.98);
+        border-color: rgba(96, 165, 250, 0.4) !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1109,10 +1116,9 @@ DISPLAY_COLUMNS = [
     "Target Price", "Upside %", "Position Size %",
 ]
 
-# ============= MOBILE KPI ROW (with responsive CSS) =============
+# ============= KPI ROW (2-per-row) =============
 def render_kpi_row(scored):
     inject_mobile_css()
-
     total = len(scored)
     avg = scored["AI_Score"].mean()
     sb = int((scored["AI Signal"] == "Strong Buy").sum())
@@ -1120,14 +1126,15 @@ def render_kpi_row(scored):
     clean = int((scored.get("Quality Grade", pd.Series()) == "A — Clean").sum())
     entry = int(scored.get("Valuation Action", pd.Series()).astype(str)
                 .str.contains("DEEP BUY|ENTRY", na=False).sum())
-
-    c = st.columns(6)
-    c[0].metric("Total Stocks", total)
-    c[1].metric("Avg AI Score", f"{avg:.1f}")
-    c[2].metric("Strong Buys", sb)
-    c[3].metric("Buy / Strong Buy", bl)
-    c[4].metric("Clean (Grade A)", clean)
-    c[5].metric("🎯 Entry Triggers", entry)
+    c1 = st.columns(2)
+    c1[0].metric("Total Stocks", total)
+    c1[1].metric("Avg AI Score", f"{avg:.1f}")
+    c2 = st.columns(2)
+    c2[0].metric("Strong Buys", sb)
+    c2[1].metric("Buy / Strong Buy", bl)
+    c3 = st.columns(2)
+    c3[0].metric("Clean (Grade A)", clean)
+    c3[1].metric("🎯 Entry Triggers", entry)
 
 # ============= SCREENER TAB =============
 def render_screener_tab(scored, registry, project_dir):
@@ -1140,7 +1147,6 @@ def render_screener_tab(scored, registry, project_dir):
                             default=sorted(scored["AI Signal"].unique().tolist()))
         act_opts = sorted(scored.get("Valuation Action", pd.Series()).dropna().unique().tolist())
         ac = st.multiselect("Valuation Action", act_opts, default=act_opts) if act_opts else []
-
     f = scored[scored["AI_Score"].ge(ms) & scored["AI Signal"].isin(sg)]
     if "Valuation Action" in scored.columns and ac:
         f = f[f["Valuation Action"].isin(ac)]
@@ -1149,21 +1155,16 @@ def render_screener_tab(scored, registry, project_dir):
     sc = detect_sector_column(f)
     if sc and "Sector" not in f.columns: f = f.rename(columns={sc: "Sector"})
     cols = [c for c in DISPLAY_COLUMNS if c in f.columns]
-
     styled = (f[cols].style
         .map(style_signal, subset=["AI Signal"])
         .map(style_valuation, subset=["Valuation Action"])
         .map(style_risk, subset=["Risk Level"])
-        .format({
-            "CMP": "₹{:,.2f}", "AI_Score": "{:.0f}", "AI Confidence": "{:.0f}",
+        .format({"CMP": "₹{:,.2f}", "AI_Score": "{:.0f}", "AI Confidence": "{:.0f}",
             "Valuation_Trigger_Score": "{:.0f}",
             "Entry Trigger Price": "₹{:,.2f}", "Exit Trigger Price": "₹{:,.2f}",
-            "Margin of Safety %": "{:+.2f}%",
-            "Intrinsic Value (Base)": "₹{:,.2f}",
+            "Margin of Safety %": "{:+.2f}%", "Intrinsic Value (Base)": "₹{:,.2f}",
             "Sharpe": "{:.2f}", "Target Price": "₹{:,.2f}",
-            "Upside %": "{:+.2f}%", "Position Size %": "{:.1f}%",
-        }, na_rep="—"))
-
+            "Upside %": "{:+.2f}%", "Position Size %": "{:.1f}%"}, na_rep="—"))
     st.subheader(f"📋 Screened Results ({len(f)} stocks)")
     st.dataframe(styled, use_container_width=True, height=560, hide_index=True)
     ss = analyse_sectors(scored)
@@ -1182,7 +1183,7 @@ def render_screener_tab(scored, registry, project_dir):
     except Exception as exc:
         d2.warning(f"Excel fail: {exc}")
 
-# ============= DCF VALUATION TAB =============
+# ============= DCF TAB =============
 def render_dcf_valuation_tab(scored):
     st.subheader("💰 DCF Valuation Dashboard")
     st.caption("Hybrid IV: Enhanced 2-Stage DCF (60%) + Peer-Multiples (40%).")
@@ -1190,24 +1191,23 @@ def render_dcf_valuation_tab(scored):
         st.warning("Valuation data missing."); return
     val = scored.dropna(subset=["Intrinsic Value (Base)", "CMP"]).copy()
     if val.empty: st.info("Koi valuation data nahi."); return
-
     dv = int((val["Margin of Safety %"] >= 40).sum())
     uv = int(((val["Margin of Safety %"] >= 10) & (val["Margin of Safety %"] < 40)).sum())
     fv = int((val["Margin of Safety %"].abs() < 10).sum())
     ov = int((val["Margin of Safety %"] <= -10).sum())
     am = val["Margin of Safety %"].mean()
     aw = val["WACC Used"].mean() if "WACC Used" in val else np.nan
-
-    c = st.columns(6)
+    c = st.columns(2)
     c[0].metric("🟢 Deep Value", dv)
     c[1].metric("🟢 Undervalued", uv)
-    c[2].metric("⚪ Fair", fv)
-    c[3].metric("🔴 Overvalued", ov)
-    c[4].metric("Avg MoS", f"{am:+.1f}%")
-    c[5].metric("Avg WACC", f"{aw:.1%}" if pd.notna(aw) else "—")
+    c = st.columns(2)
+    c[0].metric("⚪ Fair", fv)
+    c[1].metric("🔴 Overvalued", ov)
+    c = st.columns(2)
+    c[0].metric("Avg MoS", f"{am:+.1f}%")
+    c[1].metric("Avg WACC", f"{aw:.1%}" if pd.notna(aw) else "—")
     st.divider()
-
-    st.markdown("### 🎯 Trigger Alerts (Actionable Now)")
+    st.markdown("### 🎯 Trigger Alerts")
     trigger_col = "Valuation Action" if "Valuation Action" in val.columns else None
     if trigger_col:
         entry_hits = val[val[trigger_col].isin(
@@ -1215,44 +1215,37 @@ def render_dcf_valuation_tab(scored):
             "Margin of Safety %", ascending=False)
         exit_hits = val[val[trigger_col] == "🔴 EXIT TRIGGER"].sort_values(
             "Margin of Safety %")
-
-        col_left, col_right = st.columns(2)
-        with col_left:
-            st.markdown(f"##### 🟢 Entry Zone ({len(entry_hits)})")
-            if entry_hits.empty:
-                st.info("Koi stock entry zone mein nahi hai.")
-            else:
-                ec = ["Ticker", "Name", "CMP", "Entry Trigger Price", "Exit Trigger Price",
-                      "Lower Intrinsic Value", "Margin of Safety %", "AI_Score", "Valuation Action"]
-                ec = [c for c in ec if c in entry_hits.columns]
-                st.dataframe(entry_hits[ec].style
-                    .map(style_valuation, subset=["Valuation Action"])
-                    .format({"CMP": "₹{:,.2f}", "Entry Trigger Price": "₹{:,.2f}",
-                             "Exit Trigger Price": "₹{:,.2f}",
-                             "Lower Intrinsic Value": "₹{:,.2f}",
-                             "Margin of Safety %": "{:+.2f}%",
-                             "AI_Score": "{:.0f}"}, na_rep="—"),
-                    use_container_width=True, hide_index=True,
-                    height=min(400, 40 + 35 * len(entry_hits)))
-        with col_right:
-            st.markdown(f"##### 🔴 Exit Zone ({len(exit_hits)})")
-            if exit_hits.empty:
-                st.info("Koi stock exit zone mein nahi hai.")
-            else:
-                xc = ["Ticker", "Name", "CMP", "Entry Trigger Price", "Exit Trigger Price",
-                      "Upper Intrinsic Value", "Margin of Safety %", "AI_Score", "Valuation Action"]
-                xc = [c for c in xc if c in exit_hits.columns]
-                st.dataframe(exit_hits[xc].style
-                    .map(style_valuation, subset=["Valuation Action"])
-                    .format({"CMP": "₹{:,.2f}", "Entry Trigger Price": "₹{:,.2f}",
-                             "Exit Trigger Price": "₹{:,.2f}",
-                             "Upper Intrinsic Value": "₹{:,.2f}",
-                             "Margin of Safety %": "{:+.2f}%",
-                             "AI_Score": "{:.0f}"}, na_rep="—"),
-                    use_container_width=True, hide_index=True,
-                    height=min(400, 40 + 35 * len(exit_hits)))
+        st.markdown(f"##### 🟢 Entry Zone ({len(entry_hits)})")
+        if entry_hits.empty:
+            st.info("Koi stock entry zone mein nahi hai.")
+        else:
+            ec = ["Ticker", "Name", "CMP", "Entry Trigger Price", "Exit Trigger Price",
+                  "Margin of Safety %", "AI_Score", "Valuation Action"]
+            ec = [c for c in ec if c in entry_hits.columns]
+            st.dataframe(entry_hits[ec].style
+                .map(style_valuation, subset=["Valuation Action"])
+                .format({"CMP": "₹{:,.2f}", "Entry Trigger Price": "₹{:,.2f}",
+                         "Exit Trigger Price": "₹{:,.2f}",
+                         "Margin of Safety %": "{:+.2f}%",
+                         "AI_Score": "{:.0f}"}, na_rep="—"),
+                use_container_width=True, hide_index=True,
+                height=min(400, 40 + 35 * len(entry_hits)))
+        st.markdown(f"##### 🔴 Exit Zone ({len(exit_hits)})")
+        if exit_hits.empty:
+            st.info("Koi stock exit zone mein nahi hai.")
+        else:
+            xc = ["Ticker", "Name", "CMP", "Entry Trigger Price", "Exit Trigger Price",
+                  "Margin of Safety %", "AI_Score", "Valuation Action"]
+            xc = [c for c in xc if c in exit_hits.columns]
+            st.dataframe(exit_hits[xc].style
+                .map(style_valuation, subset=["Valuation Action"])
+                .format({"CMP": "₹{:,.2f}", "Entry Trigger Price": "₹{:,.2f}",
+                         "Exit Trigger Price": "₹{:,.2f}",
+                         "Margin of Safety %": "{:+.2f}%",
+                         "AI_Score": "{:.0f}"}, na_rep="—"),
+                use_container_width=True, hide_index=True,
+                height=min(400, 40 + 35 * len(exit_hits)))
         st.divider()
-
     cc = st.columns(2)
     mms = cc[0].slider("Min MoS %", -100, 100, -100, 5)
     sigs = cc[1].multiselect("Valuation Signal",
@@ -1263,14 +1256,12 @@ def render_dcf_valuation_tab(scored):
         so = ["All"] + sorted(val[sc].dropna().unique().tolist())
         sf = st.selectbox("Sub-Sector", so)
     else: sf = "All"
-
     f = val[val["Margin of Safety %"].ge(mms) & val["Valuation Signal"].isin(sigs)]
     if sf != "All" and sc: f = f[f[sc] == sf]
     f = f.copy().sort_values("Margin of Safety %", ascending=False,
                              kind="stable").reset_index(drop=True)
     sc2 = detect_sector_column(f)
     if sc2 and "Sector" not in f.columns: f = f.rename(columns={sc2: "Sector"})
-
     cols = ["Rank", "Ticker", "Name", "Sector", "CMP", "Lower Intrinsic Value",
             "Intrinsic Value (Base)", "Upper Intrinsic Value",
             "Intrinsic Value (DCF)", "Intrinsic Value (Multiples)", "WACC Used",
@@ -1278,7 +1269,6 @@ def render_dcf_valuation_tab(scored):
             "Entry Trigger Price", "Exit Trigger Price", "To Entry %", "To Exit %",
             "AI_Score", "AI Signal", "DCF_Valuation_Score", "Valuation_Trigger_Score"]
     cols = [c for c in cols if c in f.columns]
-
     st.subheader(f"📋 Valuation Table ({len(f)})")
     st.dataframe(f[cols].style
         .map(style_valuation, subset=["Valuation Signal"])
@@ -1294,30 +1284,10 @@ def render_dcf_valuation_tab(scored):
                  "AI_Score": "{:.0f}", "DCF_Valuation_Score": "{:.0f}",
                  "Valuation_Trigger_Score": "{:.0f}"}, na_rep="—"),
         use_container_width=True, hide_index=True, height=560)
-
-    st.download_button("⬇️ Download Valuation Report (CSV)",
+    st.download_button("⬇️ Download Valuation Report",
                        data=f[cols].to_csv(index=False).encode("utf-8"),
                        file_name=f"dcf_valuation_{datetime.now():%Y%m%d_%H%M}.csv",
                        mime="text/csv")
-    st.divider()
-
-    st.markdown("##### 📊 Market Price vs Intrinsic Value")
-    if go is not None:
-        pd_ = f.dropna(subset=["CMP", "Intrinsic Value (Base)"]).copy()
-        if not pd_.empty:
-            pd_["Zone"] = np.where(pd_["Margin of Safety %"] >= 10, "Undervalued",
-                np.where(pd_["Margin of Safety %"] <= -10, "Overvalued", "Fair"))
-            fig = px.scatter(pd_, x="CMP", y="Intrinsic Value (Base)",
-                color="Zone", size="AI_Score",
-                hover_data=["Ticker", "Name", "Margin of Safety %"],
-                color_discrete_map={"Undervalued": "#34d399", "Fair": "#fbbf24",
-                                    "Overvalued": "#fb7185"})
-            mv = float(max(pd_["CMP"].max(), pd_["Intrinsic Value (Base)"].max()))
-            fig.add_trace(go.Scatter(x=[0, mv], y=[0, mv], mode="lines",
-                name="Fair Value", line=dict(color="#8ba3c0", dash="dash", width=1.5)))
-            fig.update_layout(title="Above dashed line = undervalued",
-                xaxis_title="Market Price (₹)", yaxis_title="Intrinsic Value (₹)")
-            _style_figure(fig, 480); st.plotly_chart(fig, use_container_width=True)
 
 # ============= OTHER TABS =============
 def render_sector_tab(scored, project_dir):
@@ -1341,8 +1311,7 @@ def render_rotation_tab(scored, project_dir):
     st.markdown("### 🔥 Sub-Sector Rotation")
     if rot.empty: st.info("Rotation unavailable."); return
     if not rot["Prev AI Score"].notna().any():
-        st.info("📌 Pehla run — WoW next run se populate hoga.")
-        return
+        st.info("📌 Pehla run — WoW next run se populate hoga."); return
     dc = [c for c in ["Sector", "Stocks", "Avg AI Score", "Prev AI Score",
                       "WoW AI Δ", "Avg Sector-Rel", "WoW Sector-Rel Δ", "Rotation"]
           if c in rot.columns]
@@ -1354,7 +1323,7 @@ def render_rotation_tab(scored, project_dir):
         use_container_width=True, hide_index=True)
 
 def render_peer_tab(scored):
-    st.markdown("### 👥 Sub-Sector Peer Comparison")
+    st.markdown("### 👥 Peer Comparison")
     sc = detect_sector_column(scored)
     if sc is None or scored[sc].isna().all(): st.info("Data nahi."); return
     ss = sorted(scored[sc].dropna().unique().tolist())
@@ -1403,11 +1372,12 @@ def render_risk_tab(scored):
     st.subheader("⚖️ Risk Analytics")
     if "Sharpe" not in scored.columns or scored["Sharpe"].isna().all():
         st.info("Risk data missing."); return
-    m = st.columns(4)
+    m = st.columns(2)
     m[0].metric("Avg Sharpe", f"{scored['Sharpe'].mean():.2f}")
     m[1].metric("Avg Beta", f"{scored['Beta'].mean():.2f}")
-    m[2].metric("Beating Nifty", f"{(scored['Return 1Y %'] > scored['Nifty 1Y %']).sum()}/{len(scored)}")
-    m[3].metric("Avg Alpha", f"{scored['Alpha %'].mean():+.2f}%")
+    m = st.columns(2)
+    m[0].metric("Beating Nifty", f"{(scored['Return 1Y %'] > scored['Nifty 1Y %']).sum()}/{len(scored)}")
+    m[1].metric("Avg Alpha", f"{scored['Alpha %'].mean():+.2f}%")
     cs = ["Rank", "Ticker", "Name", "Sharpe", "Sortino", "Volatility %",
           "Max Drawdown %", "Beta", "Alpha %", "Return 1Y %", "Nifty 1Y %",
           "Relative Strength %"]
@@ -1422,11 +1392,12 @@ def render_risk_tab(scored):
 def render_flags_tab(scored):
     st.subheader("🚩 Red Flag Scanner")
     if "Red Flag Count" not in scored.columns: return
-    c = st.columns(4)
+    c = st.columns(2)
     c[0].metric("Grade A", f"{(scored['Quality Grade'] == 'A — Clean').sum()}")
     c[1].metric("Grade B", f"{(scored['Quality Grade'] == 'B — Minor').sum()}")
-    c[2].metric("Grade C", f"{(scored['Quality Grade'] == 'C — Watch').sum()}")
-    c[3].metric("Grade D", f"{(scored['Quality Grade'] == 'D — High Risk').sum()}")
+    c = st.columns(2)
+    c[0].metric("Grade C", f"{(scored['Quality Grade'] == 'C — Watch').sum()}")
+    c[1].metric("Grade D", f"{(scored['Quality Grade'] == 'D — High Risk').sum()}")
     fl = scored[scored["Red Flag Count"] > 0].sort_values(
         ["Red Flag Count", "AI_Score"], ascending=[False, False])
     cs = ["Rank", "Ticker", "Name", "Sector", "AI_Score", "AI Signal", "Red Flag Count",
@@ -1456,12 +1427,13 @@ def render_quality_tab(scored):
     st.subheader("🔍 Data Quality")
     tot = len(scored)
     fok = int((scored.get("Fetch Status", pd.Series()) == "OK").sum())
-    c = st.columns(4)
+    c = st.columns(2)
     c[0].metric("Total", tot)
     c[1].metric("Fetch OK", f"{fok}/{tot}")
     sc = detect_sector_column(scored)
-    c[2].metric("Sector Data", f"{scored[sc].notna().sum()}/{tot}" if sc else "—")
-    c[3].metric("Valuation OK", f"{scored.get('Intrinsic Value (Base)', pd.Series()).notna().sum()}/{tot}")
+    c = st.columns(2)
+    c[0].metric("Sector Data", f"{scored[sc].notna().sum()}/{tot}" if sc else "—")
+    c[1].metric("Valuation OK", f"{scored.get('Intrinsic Value (Base)', pd.Series()).notna().sum()}/{tot}")
 
 def render_trade_tab(scored):
     st.subheader("💼 Trade Plan")
@@ -1486,17 +1458,18 @@ def render_deep_tab(scored):
     t = st.selectbox("Ticker", scored["Ticker"].tolist())
     if not t: return
     row = scored.loc[scored["Ticker"] == t].iloc[0]
-    c = st.columns(3)
+    c = st.columns(2)
     c[0].metric("CMP", fmt_money(row.get("CMP")))
     c[1].metric("AI Score", f"{row.get('AI_Score', 0):.0f}", row.get("AI Signal", "—"))
-    c[2].metric("MoS", f"{row.get('Margin of Safety %', 0):+.1f}%")
-    c = st.columns(3)
-    c[0].metric("Action", row.get("Valuation Action", "—"))
-    c[1].metric("Intrinsic", fmt_money(row.get("Intrinsic Value (Base)")))
-    c[2].metric("Upside", f"{row.get('Upside %', 0):+.2f}%")
+    c = st.columns(2)
+    c[0].metric("MoS", f"{row.get('Margin of Safety %', 0):+.1f}%")
+    c[1].metric("Action", row.get("Valuation Action", "—"))
+    c = st.columns(2)
+    c[0].metric("Intrinsic", fmt_money(row.get("Intrinsic Value (Base)")))
+    c[1].metric("Upside", f"{row.get('Upside %', 0):+.2f}%")
     ec1, ec2 = st.columns(2)
-    ec1.metric("🎯 Entry Trigger", fmt_money(row.get("Entry Trigger Price")))
-    ec2.metric("🚪 Exit Trigger", fmt_money(row.get("Exit Trigger Price")))
+    ec1.metric("🎯 Entry", fmt_money(row.get("Entry Trigger Price")))
+    ec2.metric("🚪 Exit", fmt_money(row.get("Exit Trigger Price")))
     tabs = st.tabs(["📈 Chart", "💰 Valuation", "🎯 Triggers", "🧮 Fundamentals"])
     with tabs[0]: render_price_chart(t)
     with tabs[1]:
