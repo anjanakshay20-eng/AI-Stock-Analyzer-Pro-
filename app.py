@@ -1,4 +1,13 @@
-"""AI Stock Analyzer Pro — v5 Complete."""
+"""AI Stock Analyzer Pro — v6 Final Complete.
+
+Features:
+  • 15-min auto-refresh (full app)
+  • All chart indicators (SMA/EMA/BB/SuperTrend/VWAP/PSAR + RSI/MACD/Stoch/ADX/ATR/OBV)
+  • Hybrid tab (Risk + Flags + Sectors + Rotation)
+  • Tab reordering with persistence
+  • Mobile-native responsive UI
+  • Bigger fonts, vertical tags, auto-hide filters
+"""
 
 from __future__ import annotations
 import concurrent.futures, io, json, logging
@@ -44,12 +53,11 @@ BENCHMARK_TICKER = "^NSEI"
 TRADING_DAYS = 252
 SECTOR_COLUMN_CANDIDATES = ["Sub-Sector", "Sector", "Sector Name"]
 
-# ⭐ CHANGE 3: Tab registry for reordering
 TAB_META = {
     "screener": {"label": "🎯 Screener"},
     "dcf":      {"label": "💰 DCF"},
     "deep":     {"label": "🔬 Deep"},
-    "hybrid":   {"label": "🔀 Hybrid"},  # ⭐ CHANGE 2
+    "hybrid":   {"label": "🔀 Hybrid"},
     "trade":    {"label": "💼 Trade"},
     "peers":    {"label": "👥 Peers"},
     "indices":  {"label": "📊 Indices"},
@@ -59,7 +67,6 @@ TAB_META = {
 DEFAULT_TAB_ORDER = ["screener", "dcf", "deep", "hybrid", "trade",
                      "peers", "indices", "patterns", "quality"]
 
-# ⭐ CHANGE 1: All chart indicators
 CHART_OVERLAYS = {
     "SMA 20":  {"color": "#fbbf24", "kind": "sma", "window": 20,  "col": "20 DMA"},
     "SMA 50":  {"color": "#60a5fa", "kind": "sma", "window": 50,  "col": "50 DMA"},
@@ -127,7 +134,7 @@ DEFAULT_INDEX_CONSTITUENTS = {
         "BANKBARODA","PNB","IDFCFIRSTB","FEDERALBNK","AUBANK","BANDHANBNK"],
 }
 
-# ============ TAB ORDER PERSISTENCE (CHANGE 3) ============
+# ============ TAB ORDER PERSISTENCE ============
 def _tab_order_path(p): return p / DATA_DIR_NAME / TAB_ORDER_FILE
 
 def load_tab_order(project_dir):
@@ -860,7 +867,7 @@ def compute_sector_rotation(project_dir, current_stats):
         ["🚀 Leading", "📈 Improving", "🔻 Lagging", "📉 Weakening"], default="➖ Stable")
     return merged.sort_values("WoW AI Δ", ascending=False, kind="stable").reset_index(drop=True)
 
-# ============ CHART INDICATORS (CHANGE 1) ============
+# ============ CHARTS ============
 @st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
 def _fetch_chart_for_period(ticker, period, interval):
     sym = ticker if ticker.endswith((".NS", ".BO")) else f"{ticker}.NS"
@@ -972,46 +979,59 @@ def _build_subplot_trace(h, kind):
 def render_price_chart(ticker, row=None):
     if go is None or make_subplots is None:
         st.info("`pip install plotly` karein."); return
-    c_a, c_b = st.columns(2)
-    with c_a:
-        ovl_key = f"ovl_{ticker}"
-        if ovl_key not in st.session_state: st.session_state[ovl_key] = ["SMA 20", "SMA 50", "SMA 200"]
-        selected_ovl = st.multiselect("📊 Price Overlays",
-            options=list(CHART_OVERLAYS.keys()), default=st.session_state[ovl_key],
-            key=f"ms_{ovl_key}")
-        st.session_state[ovl_key] = selected_ovl
-    with c_b:
-        sub_key = f"sub_{ticker}"
-        if sub_key not in st.session_state: st.session_state[sub_key] = ["Volume", "RSI"]
-        selected_sub = st.multiselect("📉 Subplots", options=CHART_SUBPLOTS,
-            default=st.session_state[sub_key], key=f"ms_{sub_key}")
-        st.session_state[sub_key] = selected_sub
-    period_opts = [("1D","1d","5m"), ("1W","5d","30m"), ("1M","1mo","1d"),
-                   ("3M","3mo","1d"), ("6M","6mo","1d"), ("1Y","1y","1d"), ("5Y","5y","1d")]
+
+    ovl_key = f"ovl_{ticker}"
+    if ovl_key not in st.session_state:
+        st.session_state[ovl_key] = ["SMA 20", "SMA 50", "SMA 200"]
+    selected_ovl = st.multiselect("📊 Price Overlays",
+        options=list(CHART_OVERLAYS.keys()), default=st.session_state[ovl_key],
+        key=f"ms_{ovl_key}")
+    st.session_state[ovl_key] = selected_ovl
+
+    sub_key = f"sub_{ticker}"
+    if sub_key not in st.session_state:
+        st.session_state[sub_key] = ["Volume", "RSI"]
+    selected_sub = st.multiselect("📉 Subplots", options=CHART_SUBPLOTS,
+        default=st.session_state[sub_key], key=f"ms_{sub_key}")
+    st.session_state[sub_key] = selected_sub
+
+    period_labels = ["1D", "1W", "1M", "3M", "6M", "1Y", "5Y"]
+    period_map = {
+        "1D": ("1d", "5m"), "1W": ("5d", "30m"), "1M": ("1mo", "1d"),
+        "3M": ("3mo", "1d"), "6M": ("6mo", "1d"), "1Y": ("1y", "1d"),
+        "5Y": ("5y", "1d"),
+    }
     state_key = f"chart_period_{ticker}"
-    if state_key not in st.session_state: st.session_state[state_key] = "1Y"
-    cols = st.columns(len(period_opts))
-    for i, (label, _, _) in enumerate(period_opts):
-        with cols[i]:
-            active = st.session_state[state_key] == label
-            if st.button(label, key=f"period_{ticker}_{label}",
-                         use_container_width=True,
-                         type="primary" if active else "secondary"):
-                st.session_state[state_key] = label; st.rerun()
-    selected = st.session_state[state_key]
-    period, interval = next((p, i) for lbl, p, i in period_opts if lbl == selected)
+    if state_key not in st.session_state:
+        st.session_state[state_key] = "1Y"
+
+    selected = st.radio(
+        "Period", options=period_labels,
+        index=period_labels.index(st.session_state[state_key]),
+        horizontal=True, key=f"radio_{ticker}",
+        label_visibility="collapsed",
+    )
+    st.session_state[state_key] = selected
+    period, interval = period_map[selected]
+
     h = _fetch_chart_for_period(ticker, period, interval)
-    if h.empty: st.warning(f"{ticker} chart data nahi mila."); return
+    if h.empty:
+        st.warning(f"{ticker} chart data nahi mila."); return
+
     n_sub = len(selected_sub)
     if n_sub > 0:
-        heights = [0.55] + [0.45/n_sub]*n_sub
-        fig = make_subplots(rows=1+n_sub, cols=1, shared_xaxes=True,
-                            vertical_spacing=0.025, row_heights=heights,
+        heights = [0.55] + [0.45 / n_sub] * n_sub
+        fig = make_subplots(rows=1 + n_sub, cols=1, shared_xaxes=True,
+                            vertical_spacing=0.03, row_heights=heights,
                             subplot_titles=[""] + selected_sub)
-    else: fig = make_subplots(rows=1, cols=1)
-    fig.add_trace(go.Candlestick(x=h.index, open=h["Open"], high=h["High"],
-        low=h["Low"], close=h["Close"], name=ticker,
-        increasing_line_color="#34d399", decreasing_line_color="#fb7185"), row=1, col=1)
+    else:
+        fig = make_subplots(rows=1, cols=1)
+
+    fig.add_trace(go.Candlestick(
+        x=h.index, open=h["Open"], high=h["High"], low=h["Low"], close=h["Close"],
+        name=ticker, increasing_line_color="#34d399", decreasing_line_color="#fb7185"),
+        row=1, col=1)
+
     for ov_name in selected_ovl:
         meta = CHART_OVERLAYS[ov_name]
         line = _compute_overlay_series(h, meta["kind"], meta.get("window"))
@@ -1028,18 +1048,146 @@ def render_price_chart(ticker, row=None):
                 marker=dict(color=meta["color"], size=4)), row=1, col=1)
         else:
             fig.add_trace(go.Scatter(x=h.index, y=line, mode="lines", name=legend_name,
-                line=dict(color=meta["color"], width=1.6)), row=1, col=1)
+                line=dict(color=meta["color"], width=1.8)), row=1, col=1)
+
     for i, sp_name in enumerate(selected_sub, start=2):
         for tr in _build_subplot_trace(h, sp_name):
             fig.add_trace(tr, row=i, col=1)
-    fig.update_layout(xaxis_rangeslider_visible=False,
-                      title=f"{ticker} — {selected}",
-                      legend=dict(orientation="h", yanchor="bottom", y=1.02,
-                                  xanchor="right", x=1, font=dict(size=10)))
+
+    fig.update_layout(
+        xaxis_rangeslider_visible=False,
+        title=f"{ticker} — {selected} Price Action",
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.05,
+            xanchor="right", x=1,
+            font=dict(size=13, color="#e5eefb", family="sans-serif"),
+            bgcolor="rgba(7,13,24,0.7)", bordercolor="rgba(96,165,250,0.3)",
+            borderwidth=1,
+        ),
+        margin=dict(t=80, b=30, l=20, r=20),
+    )
     fig.update_xaxes(gridcolor="#1c2e45", zerolinecolor="#1c2e45")
     fig.update_yaxes(gridcolor="#1c2e45", zerolinecolor="#1c2e45")
-    _style_figure(fig, 460 + n_sub*120)
+    _style_figure(fig, 500 + n_sub * 130)
     st.plotly_chart(fig, use_container_width=True)
+
+def _gauge_chart(value, title):
+    try: value = float(value) if pd.notna(value) else 50.0
+    except Exception: value = 50.0
+    if value >= 75: color, label = "#10b981", "Strong Buy"
+    elif value >= 60: color, label = "#34d399", "Buy"
+    elif value >= 45: color, label = "#fbbf24", "Neutral"
+    elif value >= 30: color, label = "#fb923c", "Sell"
+    else: color, label = "#fb7185", "Strong Sell"
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number", value=value,
+        number={"font": {"color": "#e5eefb", "size": 26}},
+        title={"text": f"{title}<br><span style='font-size:0.75em;color:{color};font-weight:700'>{label}</span>",
+               "font": {"color": "#8ba3c0", "size": 13}},
+        gauge={"shape": "angular",
+            "axis": {"range": [0, 100], "tickwidth": 1,
+                     "tickcolor": "#8ba3c0", "tickfont": {"size": 9}},
+            "bar": {"color": color, "thickness": 0.35},
+            "bgcolor": "rgba(0,0,0,0)", "borderwidth": 0,
+            "steps": [
+                {"range": [0, 30], "color": "rgba(251, 113, 133, 0.18)"},
+                {"range": [30, 45], "color": "rgba(251, 146, 60, 0.18)"},
+                {"range": [45, 60], "color": "rgba(251, 191, 36, 0.18)"},
+                {"range": [60, 75], "color": "rgba(52, 211, 153, 0.18)"},
+                {"range": [75, 100], "color": "rgba(16, 185, 129, 0.18)"},
+            ],
+            "threshold": {"line": {"color": "#ffffff", "width": 2},
+                          "thickness": 0.8, "value": value}}))
+    fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font={"color": "#8ba3c0"}, height=250,
+        margin={"t": 55, "b": 10, "l": 20, "r": 20})
+    return fig
+
+def render_technical_analysis(row):
+    st.markdown("### 📊 Technical Analysis")
+    def _safe(v):
+        try:
+            if pd.isna(v): return 50.0
+            return float(v)
+        except Exception: return 50.0
+    tech_score = _safe(row.get("Technical_Score", 50))
+    analyst_score = _safe(row.get("Analyst_Consensus_Score", 50))
+    fund_score = _safe(row.get("Fundamental_Score_AI", 50))
+    dcf_score = _safe(row.get("DCF_Valuation_Score", 50))
+    sector_score = _safe(row.get("Sector_Relative_Score", 50))
+    trigger_score = _safe(row.get("Valuation_Trigger_Score", 50))
+    c1, c2 = st.columns(2)
+    with c1: st.plotly_chart(_gauge_chart(tech_score, "Technical Rating"), use_container_width=True)
+    with c2: st.plotly_chart(_gauge_chart(analyst_score, "Analyst Rating"), use_container_width=True)
+    c3, c4 = st.columns(2)
+    with c3: st.plotly_chart(_gauge_chart(fund_score, "Fundamental Score"), use_container_width=True)
+    with c4: st.plotly_chart(_gauge_chart(dcf_score, "Valuation Score"), use_container_width=True)
+    c5, c6 = st.columns(2)
+    with c5: st.plotly_chart(_gauge_chart(sector_score, "Sector Relative"), use_container_width=True)
+    with c6: st.plotly_chart(_gauge_chart(trigger_score, "Entry/Exit Trigger"), use_container_width=True)
+
+    st.markdown("### 👥 Analyst Rating")
+    ac1, ac2, ac3 = st.columns(3)
+    buy_pct = row.get("Percentage Buy Reco's", 0)
+    sell_pct = row.get("Percentage Sell Reco's", 0)
+    n_analysts = row.get("Total no. of analysts", 0)
+    ac1.metric("Buy %", f"{(buy_pct if pd.notna(buy_pct) else 0):.0f}%")
+    ac2.metric("Sell %", f"{(sell_pct if pd.notna(sell_pct) else 0):.0f}%")
+    ac3.metric("Analysts", f"{int(n_analysts if pd.notna(n_analysts) else 0)}")
+
+    st.markdown("### 📈 Detailed Indicators")
+    key_indicators = {
+        "CMP": row.get("CMP"), "RSI (14D)": row.get("RSI"),
+        "ADX": row.get("ADX"), "ATR": row.get("ATR"),
+        "MACD Signal": row.get("MACDSignal"), "Histogram": row.get("Histogram"),
+        "20 DMA": row.get("20 DMA"), "50 DMA": row.get("50 DMA"),
+        "200 DMA": row.get("200 DMA"), "EMA20": row.get("EMA20"),
+        "EMA50": row.get("EMA50"), "EMA200": row.get("EMA200"),
+        "Upper Band": row.get("Upper Band"), "Middle Band": row.get("Middle Band"),
+        "Lower Band": row.get("Lower Band"),
+        "DI Plus": row.get("DI Plus"), "DI Minus": row.get("DI Minus"),
+        "SuperTrend": row.get("SuperTrend"), "SuperTrend Val": row.get("SuperTrend_Val"),
+        "Trend Pivot": row.get("Trend Pivot"),
+        "R1": row.get("R1"), "R2": row.get("R2"), "R3": row.get("R3"),
+        "S1": row.get("S1"), "S2": row.get("S2"), "S3": row.get("S3"),
+        "52W High": row.get("52W High"), "52W Low": row.get("52W Low"),
+        "Volume": row.get("Volume"), "Avg Volume": row.get("Avg Volume"),
+        "Trend Score": row.get("Trend Score"), "Momentum Score": row.get("Momentum Score"),
+        "Volume Score": row.get("Volume Score"),
+        "Volatility Score": row.get("Volatility Score"),
+        "Support Resistance Score": row.get("Support Resistance Score"),
+    }
+    rows_html = ""
+    for k, v in key_indicators.items():
+        if k not in row.index: continue
+        if pd.isna(v):
+            disp = "—"
+        elif isinstance(v, (int, float, np.number)):
+            disp = f"{float(v):,.2f}"
+        else:
+            disp = str(v)
+        rows_html += f'''
+        <div style="display:flex;justify-content:space-between;padding:8px 12px;
+                    border-bottom:1px solid rgba(139,163,192,0.08);align-items:center;">
+            <span style="color:#8ba3c0;font-size:0.85rem;font-weight:500;">{k}</span>
+            <span style="color:#e5eefb;font-size:1rem;font-weight:700;">{disp}</span>
+        </div>'''
+    st.markdown(
+        f'<div style="background:linear-gradient(145deg,#0d1424 0%,#0a0f1c 100%);'
+        f'border:1px solid rgba(139,163,192,0.12);border-radius:12px;padding:6px;'
+        f'margin-top:8px;">{rows_html}</div>',
+        unsafe_allow_html=True
+    )
+
+    if "Patterns" in row.index and pd.notna(row.get("Patterns")):
+        st.markdown("### 📐 Detected Patterns")
+        patterns = str(row.get("Patterns", "")).split(", ")
+        pill_html = ""
+        for p in patterns:
+            if p and p != "—":
+                pill_html += f'<span style="display:inline-block;padding:4px 12px;margin:4px;background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);border-radius:12px;font-size:0.75rem;color:#60a5fa;font-weight:600;">{p}</span>'
+        if pill_html:
+            st.markdown(f"<div>{pill_html}</div>", unsafe_allow_html=True)
 
 # ============ UI HELPERS ============
 def style_signal(v):
@@ -1084,6 +1232,7 @@ def inject_mobile_css():
     .kpi-card .kpi-delta.up { color: #34d399; }
     .kpi-card .kpi-delta.down { color: #fb7185; }
     .kpi-card .kpi-delta.neutral { color: #fbbf24; }
+
     .stock-card { background: linear-gradient(145deg, #0d1424 0%, #0a0f1c 100%);
         border: 1px solid rgba(139,163,192,0.12); border-radius: 14px; padding: 14px;
         margin-bottom: 10px; position: relative; overflow: hidden; transition: all 0.2s ease; }
@@ -1120,36 +1269,97 @@ def inject_mobile_css():
         border: 1px solid rgba(251,113,133,0.3); }
     .stock-card .stock-action.hold { background: rgba(251,191,36,0.15); color: #fbbf24;
         border: 1px solid rgba(251,191,36,0.3); }
+
     .stock-scroll { display: flex !important; gap: 12px !important; overflow-x: auto !important;
         overflow-y: hidden !important; padding: 4px 0 14px 0 !important;
         scroll-snap-type: x proximity !important; -webkit-overflow-scrolling: touch !important;
         scrollbar-width: thin !important;
         scrollbar-color: rgba(96,165,250,0.5) rgba(255,255,255,0.05) !important; }
     .stock-scroll::-webkit-scrollbar { height: 8px !important; display: block !important; }
-    .stock-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.04) !important; border-radius: 4px !important; }
     .stock-scroll::-webkit-scrollbar-thumb { background: rgba(96,165,250,0.5) !important; border-radius: 4px !important; }
     .stock-scroll .stock-card { min-width: 240px !important; max-width: 240px !important;
         flex: 0 0 240px !important; margin-bottom: 0 !important; }
+
     .section-header { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 8px 0; }
     .section-header h3 { font-size: 1rem !important; font-weight: 700 !important; margin: 0 !important; color: #e5eefb; }
     .section-header .see-all { font-size: 0.75rem; color: #60a5fa; font-weight: 600; }
+
+    .js-plotly-plot .legendtext, .js-plotly-plot .legend text {
+        font-size: 14px !important; font-weight: 600 !important; }
+    .js-plotly-plot .annotation-text { font-size: 13px !important; }
+    .js-plotly-plot .xtick text, .js-plotly-plot .ytick text { font-size: 12px !important; }
+
     @media (max-width: 640px) {
         .block-container { padding-left: 0.65rem !important; padding-right: 0.65rem !important;
             padding-top: 0.5rem !important; padding-bottom: 5rem !important; }
         h1 { font-size: 1.2rem !important; }
+        h2 { font-size: 1.05rem !important; }
+        h3 { font-size: 0.95rem !important; }
+
         .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0 16px 0; }
-        .kpi-card { padding: 10px 12px; }
-        .kpi-card .kpi-label { font-size: 0.6rem; }
-        .kpi-card .kpi-value { font-size: 1.35rem; }
-        .stock-scroll .stock-card { min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; }
-        .stTabs [data-baseweb="tab-list"] { overflow-x: auto !important; white-space: nowrap !important; scrollbar-width: none !important; }
+        .kpi-card { padding: 12px 14px; }
+        .kpi-card .kpi-label { font-size: 0.65rem; }
+        .kpi-card .kpi-value { font-size: 1.5rem; }
+        .kpi-card .kpi-delta { font-size: 0.7rem; }
+
+        .stock-scroll .stock-card { min-width: 230px !important; max-width: 230px !important;
+            flex: 0 0 230px !important; }
+
+        div[data-baseweb="select"] [data-baseweb="tag"] {
+            display: block !important; width: 100% !important;
+            margin: 3px 0 !important; background: rgba(96,165,250,0.18) !important;
+            border: 1px solid rgba(96,165,250,0.4) !important;
+            border-radius: 8px !important; padding: 6px 10px !important; }
+        div[data-baseweb="select"] [data-baseweb="tag"] span {
+            font-size: 0.85rem !important; font-weight: 600 !important; color: #e5eefb !important; }
+
+        .js-plotly-plot .legendtext, .js-plotly-plot .legend text {
+            font-size: 13px !important; font-weight: 700 !important; }
+        .js-plotly-plot .annotation-text { font-size: 12px !important; }
+
+        div[role="radiogroup"] { display: flex !important; flex-wrap: wrap !important; gap: 6px !important; }
+        div[role="radiogroup"] label {
+            flex: 0 0 auto !important; padding: 6px 12px !important;
+            background: rgba(96,165,250,0.08) !important;
+            border: 1px solid rgba(96,165,250,0.25) !important;
+            border-radius: 8px !important; font-size: 0.82rem !important;
+            font-weight: 600 !important; cursor: pointer !important; }
+        div[role="radiogroup"] label[data-checked="true"] {
+            background: rgba(96,165,250,0.35) !important;
+            border-color: #60a5fa !important; }
+        div[role="radiogroup"] label input { display: none !important; }
+
+        .stTabs [data-baseweb="tab-list"] { overflow-x: auto !important; white-space: nowrap !important;
+            scrollbar-width: none !important; }
         .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar { display: none !important; }
         .stTabs [data-baseweb="tab"] { padding: 8px 12px !important; font-size: 0.78rem !important;
             white-space: nowrap !important; flex-shrink: 0 !important; }
-        div[data-testid="stHorizontalBlock"] { display: flex !important; flex-wrap: wrap !important; gap: 6px !important; }
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-            flex: 0 0 calc(50% - 3px) !important; min-width: calc(50% - 3px) !important;
-            max-width: calc(50% - 3px) !important; }
+
+        div[data-testid="stDataFrame"] * { font-size: 0.72rem !important; }
+
+        .stButton > button, .stDownloadButton > button {
+            padding: 8px 12px !important; font-size: 0.82rem !important;
+            min-height: 38px !important; width: 100% !important; }
+
+        div[data-testid="stPlotlyChart"] { margin-top: 12px !important; }
+
+        div[data-baseweb="select"] { font-size: 0.85rem !important; }
+        div[data-testid="stSlider"] { padding: 6px 0 !important; }
+        details summary { font-size: 0.85rem !important; padding: 8px 12px !important; }
+        div[data-testid="stAlert"] { font-size: 0.78rem !important; padding: 8px 10px !important; }
+    }
+
+    @media (max-width: 380px) {
+        h1 { font-size: 1.1rem !important; }
+        .kpi-card .kpi-value { font-size: 1.3rem; }
+        .stock-scroll .stock-card { min-width: 200px !important; max-width: 200px !important;
+            flex: 0 0 200px !important; }
+    }
+
+    @media (min-width: 641px) and (max-width: 1024px) {
+        .kpi-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .kpi-card .kpi-value { font-size: 1.5rem; }
+        h1 { font-size: 1.6rem !important; }
     }
     </style>""", unsafe_allow_html=True)
 
@@ -1267,7 +1477,7 @@ def render_kpi_row(scored):
 
 # ============ TAB RENDERERS ============
 def render_screener_tab(scored, registry, project_dir):
-    with st.expander("🔎 Filters", expanded=True):
+    with st.expander("🔎 Filters", expanded=False):
         c1, c2 = st.columns(2)
         ms = c1.slider("Min AI Score", 0, 100, 0, 5)
         po = ["All"] + sorted(scored["Primary Index"].dropna().unique().tolist())
@@ -1404,7 +1614,9 @@ def render_deep_tab(scored):
     row = scored.loc[scored["Ticker"] == t].iloc[0]
     st.markdown(render_stock_card_html(row), unsafe_allow_html=True)
     tabs = st.tabs(["📈 Chart", "💰 Valuation", "📊 Technical", "🧮 Fundamentals"])
-    with tabs[0]: render_price_chart(t, row=row)
+    with tabs[0]:
+        st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
+        render_price_chart(t, row=row)
     with tabs[1]:
         vd = {k: row.get(k) for k in ["Intrinsic Value (DCF)","Intrinsic Value (Multiples)",
               "Intrinsic Value (Base)","Lower Intrinsic Value","Upper Intrinsic Value",
@@ -1413,15 +1625,7 @@ def render_deep_tab(scored):
         st.json({k: (None if pd.isna(v) else (float(v) if isinstance(v, (int,float,np.number)) else v))
                  for k, v in vd.items()})
     with tabs[2]:
-        tech = {k: row.get(k) for k in ["CMP","RSI","ADX","ATR","MACDSignal","Histogram",
-                "20 DMA","50 DMA","200 DMA","EMA20","EMA50","EMA200","Upper Band","Middle Band",
-                "Lower Band","DI Plus","DI Minus","SuperTrend","SuperTrend_Val","Trend Pivot",
-                "R1","R2","R3","S1","S2","S3","52W High","52W Low","Trend Score","Momentum Score",
-                "Volume Score","Volatility Score","Support Resistance Score",
-                "Technical_Score","Analyst_Consensus_Score","Fundamental_Score_AI",
-                "Sector_Relative_Score","DCF_Valuation_Score","Valuation_Trigger_Score"] if k in row}
-        st.json({k: (None if pd.isna(v) else (float(v) if isinstance(v, (int,float,np.number)) else v))
-                 for k, v in tech.items()})
+        render_technical_analysis(row)
     with tabs[3]:
         fd = {k: row.get(k) for k in ["PE Ratio","PB Ratio","EV/EBITDA Ratio","Return on Equity",
               "ROCE","Net Profit Margin","EBITDA Margin","5Y Historical EPS Growth",
@@ -1430,7 +1634,6 @@ def render_deep_tab(scored):
         st.json({k: (None if pd.isna(v) else (float(v) if isinstance(v, (int,float,np.number)) else v))
                  for k, v in fd.items()})
 
-# ⭐ CHANGE 2: Hybrid tab
 def render_hybrid_tab(scored, project_dir):
     st.subheader("🔀 Hybrid Analytics")
     st.caption("Risk • Red Flags • Sectors • Rotation")
@@ -1603,59 +1806,4 @@ def render_dashboard(scored, registry, project_dir):
 def render_sidebar(project_dir):
     with st.sidebar:
         st.header("📁 Data Sources")
-        st.caption("Upload CSVs — `./data/` me save honge.")
-        fu = st.file_uploader("Nifty Fundamentals CSV", type=["csv"], key="f")
-        tu = st.file_uploader("Explore Promising CSV", type=["csv"], key="t")
-    return fu, tu
-
-# ============ MAIN ============
-def main():
-    st.set_page_config(page_title=APP_TITLE, page_icon="📈", layout="wide",
-                       initial_sidebar_state="collapsed")
-    inject_mobile_css()
-
-    # ⭐ Auto-refresh (15 min)
-    if AUTOREFRESH_AVAILABLE:
-        refresh_count = st_autorefresh(interval=AUTO_REFRESH_MIN * 60 * 1000,
-                                       limit=None, key="auto_refresh_tick")
-        if refresh_count % 4 == 0 and refresh_count > 0:
-            st.cache_data.clear()
-    else:
-        refresh_count = 0
-
-    st.title(f"📈 {APP_TITLE}")
-    st.caption("10-dim AI Score + Hybrid DCF + Entry/Exit Triggers.")
-
-    project_dir = Path(__file__).parent
-    registry = load_index_constituents(project_dir)
-    fu, tu = render_sidebar(project_dir)
-
-    # ⭐ Tab reorder UI + auto-refresh status
-    order = render_tab_order_ui(project_dir)
-    with st.sidebar:
-        st.divider()
-        if AUTOREFRESH_AVAILABLE:
-            st.caption(f"🔄 Auto-refresh: every {AUTO_REFRESH_MIN} min")
-            st.caption(f"⏱️ Last tick: #{refresh_count}")
-        else:
-            st.caption("⚠️ Auto-refresh off")
-        st.caption(f"🕐 Loaded: {datetime.now():%H:%M:%S}")
-
-    if fu: persist_uploaded_csv(fu, FUNDAMENTAL_PREFIX, project_dir)
-    if tu: persist_uploaded_csv(tu, TECHNICAL_PREFIX, project_dir)
-    try:
-        fund = read_csv_source(fu, find_latest_csv(project_dir, FUNDAMENTAL_PREFIX), "Fundamentals")
-        _ = read_csv_source(tu, find_latest_csv(project_dir, TECHNICAL_PREFIX), "Technicals")
-    except (FileNotFoundError, ValueError) as exc:
-        st.error(str(exc)); st.stop()
-    tickers = fund["Ticker"].dropna().unique().tolist()
-    st.info(f"📥 {len(tickers)} tickers ka data fetch ho raha hai...")
-    tech = fetch_technicals(tickers)
-    try: merged = merge_sources(fund, tech)
-    except ValueError as exc: st.error(str(exc)); st.stop()
-    with st.spinner("Scoring + valuation compute ho rahe hain..."):
-        scored = build_scores(merged, registry)
-    render_dashboard(scored, registry, project_dir)
-
-if __name__ == "__main__":
-    main()
+        st.caption("Upload
