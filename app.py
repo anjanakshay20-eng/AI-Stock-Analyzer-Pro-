@@ -1,7 +1,6 @@
-"""AI Stock Analyzer Pro — Mobile Native Feel Edition.
+"""AI Stock Analyzer Pro — Bulletproof Mobile Native Edition.
 
-10-dimension AI Score + Hybrid DCF + Entry/Exit Triggers.
-Bulletproof mobile CSS with 2-per-row KPI cards, native app feel.
+Custom HTML KPI grid + Tab-based layouts for native app feel on mobile.
 """
 
 from __future__ import annotations
@@ -939,9 +938,9 @@ def style_valuation(v):
 def fmt_money(v):
     return f"₹{v:,.2f}" if pd.notna(v) and v > 0 else "—"
 
-# ============= MOBILE RESPONSIVE CSS =============
+# ============= BULLETPROOF MOBILE CSS =============
 def inject_mobile_css():
-    """Bulletproof mobile-native CSS across all screen sizes."""
+    """Custom HTML KPI grid + bulletproof mobile CSS."""
     st.markdown("""
     <style>
     html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
@@ -950,70 +949,75 @@ def inject_mobile_css():
         padding-bottom: 2rem !important;
         max-width: 100% !important;
     }
-    button, [role="button"], .stButton > button,
-    .stDownloadButton > button, [data-testid="stTab"] {
-        -webkit-tap-highlight-color: transparent;
-        transition: all 0.15s ease;
-    }
     body, .main, section.main { overflow-x: hidden !important; }
+    footer { display: none !important; }
 
+    /* KPI GRID */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 12px;
+        margin: 12px 0 20px 0;
+    }
+    .kpi-card {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(139, 163, 192, 0.15);
+        border-radius: 12px;
+        padding: 14px 16px;
+        transition: all 0.2s ease;
+    }
+    .kpi-card:hover {
+        background: rgba(96, 165, 250, 0.06);
+        border-color: rgba(96, 165, 250, 0.4);
+        transform: translateY(-2px);
+    }
+    .kpi-card .kpi-label {
+        color: #8ba3c0;
+        font-size: 0.78rem;
+        font-weight: 500;
+        margin-bottom: 6px;
+        opacity: 0.85;
+    }
+    .kpi-card .kpi-value {
+        color: #e5eefb;
+        font-size: 1.7rem;
+        font-weight: 700;
+        line-height: 1.1;
+    }
+
+    /* MOBILE */
     @media (max-width: 640px) {
         .block-container {
             padding-left: 0.6rem !important;
             padding-right: 0.6rem !important;
             padding-top: 0.5rem !important;
         }
-        h1 { font-size: 1.3rem !important; line-height: 1.25 !important;
+        h1 { font-size: 1.25rem !important; line-height: 1.25 !important;
              margin-bottom: 0.3rem !important; }
-        h2 { font-size: 1.1rem !important; line-height: 1.3 !important; }
-        h3 { font-size: 1rem !important; }
+        h2 { font-size: 1.05rem !important; }
+        h3 { font-size: 0.95rem !important; }
 
-        /* KPI CARDS: force 2-per-row */
-        div[data-testid="stHorizontalBlock"] {
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: 6px !important;
-            width: 100% !important;
+        .kpi-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin: 10px 0 16px 0;
         }
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
-        div[data-testid="stHorizontalBlock"] > div,
-        div[data-testid="column"],
-        [data-testid="stColumn"] {
-            flex: 0 0 calc(50% - 3px) !important;
-            min-width: calc(50% - 3px) !important;
-            max-width: calc(50% - 3px) !important;
-            width: calc(50% - 3px) !important;
+        .kpi-card {
+            padding: 10px 12px;
+            border-radius: 10px;
         }
-        div[data-testid="stMetric"] {
-            padding: 6px 8px !important;
-            border-radius: 8px !important;
-            background: rgba(255,255,255,0.02) !important;
+        .kpi-card .kpi-label {
+            font-size: 0.68rem;
+            margin-bottom: 4px;
         }
-        div[data-testid="stMetricValue"] {
-            font-size: 1.15rem !important;
-            line-height: 1.2 !important;
-            font-weight: 700 !important;
+        .kpi-card .kpi-value {
+            font-size: 1.3rem;
         }
-        div[data-testid="stMetricLabel"],
-        div[data-testid="stMetricLabel"] * {
-            font-size: 0.7rem !important;
-            line-height: 1.2 !important;
-            opacity: 0.85 !important;
-        }
-        div[data-testid="stMetricDelta"] { font-size: 0.65rem !important; }
-
-        section[data-testid="stSidebar"] {
-            min-width: 82% !important;
-            max-width: 88% !important;
-        }
-        section[data-testid="stSidebar"] > div { padding: 0.5rem !important; }
 
         .stTabs [data-baseweb="tab-list"] {
             overflow-x: auto !important;
-            overflow-y: hidden !important;
             white-space: nowrap !important;
             scrollbar-width: none !important;
-            -ms-overflow-style: none !important;
             padding-bottom: 4px !important;
             gap: 0 !important;
         }
@@ -1026,64 +1030,64 @@ def inject_mobile_css():
         }
         .stTabs [data-baseweb="tab"] p { font-size: 0.78rem !important; }
 
-        div[data-testid="stDataFrame"],
-        div[data-testid="stDataFrameResizable"] {
-            overflow-x: auto !important;
-            font-size: 0.72rem !important;
-        }
+        div[data-testid="stDataFrame"] { overflow-x: auto !important; }
         div[data-testid="stDataFrame"] * { font-size: 0.72rem !important; }
-        div[data-testid="stDataFrame"] [role="columnheader"] {
-            font-size: 0.7rem !important;
-            padding: 4px 6px !important;
-        }
-        div[data-testid="stDataFrame"] [role="gridcell"] {
-            padding: 3px 6px !important;
-        }
+
         .stButton > button, .stDownloadButton > button {
             padding: 8px 12px !important;
             font-size: 0.78rem !important;
             min-height: 38px !important;
             width: 100% !important;
         }
-        section[data-testid="stFileUploaderDropzone"] { padding: 6px !important; }
+
+        section[data-testid="stSidebar"] {
+            min-width: 82% !important;
+            max-width: 88% !important;
+        }
+
         details summary {
             font-size: 0.82rem !important;
             padding: 6px 10px !important;
         }
+
         .js-plotly-plot, .plot-container { max-height: 340px !important; }
-        div[data-testid="stSlider"] { padding: 4px 0 !important; }
+
         div[data-testid="stAlert"] {
             font-size: 0.75rem !important;
             padding: 8px 10px !important;
         }
+
         div[data-baseweb="select"] { font-size: 0.78rem !important; }
+
         div.element-container { margin-bottom: 0.3rem !important; }
         hr { margin: 0.5rem 0 !important; }
-        footer { display: none !important; }
         .stTabs { margin-top: 0.5rem !important; }
-        button[kind="header"] { padding: 4px !important; }
+
+        div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 6px !important;
+        }
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            flex: 0 0 calc(50% - 3px) !important;
+            min-width: calc(50% - 3px) !important;
+            max-width: calc(50% - 3px) !important;
+        }
     }
 
     @media (max-width: 380px) {
         h1 { font-size: 1.15rem !important; }
-        div[data-testid="stMetricValue"] { font-size: 1rem !important; }
-        div[data-testid="stMetricLabel"],
-        div[data-testid="stMetricLabel"] * { font-size: 0.65rem !important; }
-        .stTabs [data-baseweb="tab"] {
-            padding: 5px 8px !important;
-            font-size: 0.72rem !important;
-        }
+        .kpi-card .kpi-value { font-size: 1.1rem; }
+        .kpi-card .kpi-label { font-size: 0.6rem; }
     }
 
     @media (min-width: 641px) and (max-width: 1024px) {
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"],
-        div[data-testid="column"] {
-            flex: 0 0 calc(33.33% - 4px) !important;
-            min-width: calc(33.33% - 4px) !important;
-            max-width: calc(33.33% - 4px) !important;
+        .kpi-grid {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
         }
-        div[data-testid="stMetricValue"] { font-size: 1.3rem !important; }
-        h1 { font-size: 1.7rem !important; }
+        .kpi-card .kpi-value { font-size: 1.5rem; }
+        h1 { font-size: 1.6rem !important; }
     }
 
     @media (min-width: 1025px) {
@@ -1091,16 +1095,6 @@ def inject_mobile_css():
             padding-left: 3rem !important;
             padding-right: 3rem !important;
         }
-    }
-
-    div[data-testid="stMetric"] {
-        border: 1px solid rgba(139, 163, 192, 0.12) !important;
-        border-radius: 10px !important;
-        transition: all 0.2s ease;
-    }
-    div[data-testid="stMetric"]:active {
-        transform: scale(0.98);
-        border-color: rgba(96, 165, 250, 0.4) !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1116,7 +1110,7 @@ DISPLAY_COLUMNS = [
     "Target Price", "Upside %", "Position Size %",
 ]
 
-# ============= KPI ROW (2-per-row) =============
+# ============= CUSTOM HTML KPI ROW =============
 def render_kpi_row(scored):
     inject_mobile_css()
     total = len(scored)
@@ -1126,15 +1120,35 @@ def render_kpi_row(scored):
     clean = int((scored.get("Quality Grade", pd.Series()) == "A — Clean").sum())
     entry = int(scored.get("Valuation Action", pd.Series()).astype(str)
                 .str.contains("DEEP BUY|ENTRY", na=False).sum())
-    c1 = st.columns(2)
-    c1[0].metric("Total Stocks", total)
-    c1[1].metric("Avg AI Score", f"{avg:.1f}")
-    c2 = st.columns(2)
-    c2[0].metric("Strong Buys", sb)
-    c2[1].metric("Buy / Strong Buy", bl)
-    c3 = st.columns(2)
-    c3[0].metric("Clean (Grade A)", clean)
-    c3[1].metric("🎯 Entry Triggers", entry)
+
+    st.markdown(f"""
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-label">Total Stocks</div>
+            <div class="kpi-value">{total}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Avg AI Score</div>
+            <div class="kpi-value">{avg:.1f}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Strong Buys</div>
+            <div class="kpi-value">{sb}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Buy / Strong Buy</div>
+            <div class="kpi-value">{bl}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Clean (Grade A)</div>
+            <div class="kpi-value">{clean}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">🎯 Entry Triggers</div>
+            <div class="kpi-value">{entry}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ============= SCREENER TAB =============
 def render_screener_tab(scored, registry, project_dir):
@@ -1183,7 +1197,7 @@ def render_screener_tab(scored, registry, project_dir):
     except Exception as exc:
         d2.warning(f"Excel fail: {exc}")
 
-# ============= DCF TAB =============
+# ============= DCF TAB — WITH TABS =============
 def render_dcf_valuation_tab(scored):
     st.subheader("💰 DCF Valuation Dashboard")
     st.caption("Hybrid IV: Enhanced 2-Stage DCF (60%) + Peer-Multiples (40%).")
@@ -1191,22 +1205,47 @@ def render_dcf_valuation_tab(scored):
         st.warning("Valuation data missing."); return
     val = scored.dropna(subset=["Intrinsic Value (Base)", "CMP"]).copy()
     if val.empty: st.info("Koi valuation data nahi."); return
+
     dv = int((val["Margin of Safety %"] >= 40).sum())
     uv = int(((val["Margin of Safety %"] >= 10) & (val["Margin of Safety %"] < 40)).sum())
     fv = int((val["Margin of Safety %"].abs() < 10).sum())
     ov = int((val["Margin of Safety %"] <= -10).sum())
     am = val["Margin of Safety %"].mean()
     aw = val["WACC Used"].mean() if "WACC Used" in val else np.nan
-    c = st.columns(2)
-    c[0].metric("🟢 Deep Value", dv)
-    c[1].metric("🟢 Undervalued", uv)
-    c = st.columns(2)
-    c[0].metric("⚪ Fair", fv)
-    c[1].metric("🔴 Overvalued", ov)
-    c = st.columns(2)
-    c[0].metric("Avg MoS", f"{am:+.1f}%")
-    c[1].metric("Avg WACC", f"{aw:.1%}" if pd.notna(aw) else "—")
+
+    # KPI as custom HTML too
+    st.markdown(f"""
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-label">🟢 Deep Value</div>
+            <div class="kpi-value">{dv}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">🟢 Undervalued</div>
+            <div class="kpi-value">{uv}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">⚪ Fair</div>
+            <div class="kpi-value">{fv}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">🔴 Overvalued</div>
+            <div class="kpi-value">{ov}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Avg MoS</div>
+            <div class="kpi-value">{am:+.1f}%</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Avg WACC</div>
+            <div class="kpi-value">{f"{aw:.1%}" if pd.notna(aw) else "—"}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
     st.divider()
+
+    # Trigger Alerts — Entry & Exit as TABS
     st.markdown("### 🎯 Trigger Alerts")
     trigger_col = "Valuation Action" if "Valuation Action" in val.columns else None
     if trigger_col:
@@ -1215,79 +1254,123 @@ def render_dcf_valuation_tab(scored):
             "Margin of Safety %", ascending=False)
         exit_hits = val[val[trigger_col] == "🔴 EXIT TRIGGER"].sort_values(
             "Margin of Safety %")
-        st.markdown(f"##### 🟢 Entry Zone ({len(entry_hits)})")
-        if entry_hits.empty:
-            st.info("Koi stock entry zone mein nahi hai.")
-        else:
-            ec = ["Ticker", "Name", "CMP", "Entry Trigger Price", "Exit Trigger Price",
-                  "Margin of Safety %", "AI_Score", "Valuation Action"]
-            ec = [c for c in ec if c in entry_hits.columns]
-            st.dataframe(entry_hits[ec].style
-                .map(style_valuation, subset=["Valuation Action"])
-                .format({"CMP": "₹{:,.2f}", "Entry Trigger Price": "₹{:,.2f}",
-                         "Exit Trigger Price": "₹{:,.2f}",
-                         "Margin of Safety %": "{:+.2f}%",
-                         "AI_Score": "{:.0f}"}, na_rep="—"),
-                use_container_width=True, hide_index=True,
-                height=min(400, 40 + 35 * len(entry_hits)))
-        st.markdown(f"##### 🔴 Exit Zone ({len(exit_hits)})")
-        if exit_hits.empty:
-            st.info("Koi stock exit zone mein nahi hai.")
-        else:
-            xc = ["Ticker", "Name", "CMP", "Entry Trigger Price", "Exit Trigger Price",
-                  "Margin of Safety %", "AI_Score", "Valuation Action"]
-            xc = [c for c in xc if c in exit_hits.columns]
-            st.dataframe(exit_hits[xc].style
-                .map(style_valuation, subset=["Valuation Action"])
-                .format({"CMP": "₹{:,.2f}", "Entry Trigger Price": "₹{:,.2f}",
-                         "Exit Trigger Price": "₹{:,.2f}",
-                         "Margin of Safety %": "{:+.2f}%",
-                         "AI_Score": "{:.0f}"}, na_rep="—"),
-                use_container_width=True, hide_index=True,
-                height=min(400, 40 + 35 * len(exit_hits)))
+
+        entry_tab, exit_tab = st.tabs([
+            f"🟢 Entry Zone ({len(entry_hits)})",
+            f"🔴 Exit Zone ({len(exit_hits)})",
+        ])
+
+        with entry_tab:
+            if entry_hits.empty:
+                st.info("Koi stock currently entry zone mein nahi hai.")
+            else:
+                ec = ["Ticker", "Name", "CMP", "Entry Trigger Price",
+                      "Exit Trigger Price", "Margin of Safety %",
+                      "AI_Score", "Valuation Action"]
+                ec = [c for c in ec if c in entry_hits.columns]
+                st.dataframe(
+                    entry_hits[ec].style
+                    .map(style_valuation, subset=["Valuation Action"])
+                    .format({"CMP": "₹{:,.2f}",
+                             "Entry Trigger Price": "₹{:,.2f}",
+                             "Exit Trigger Price": "₹{:,.2f}",
+                             "Margin of Safety %": "{:+.2f}%",
+                             "AI_Score": "{:.0f}"}, na_rep="—"),
+                    use_container_width=True, hide_index=True,
+                    height=min(500, 40 + 35 * len(entry_hits)))
+
+        with exit_tab:
+            if exit_hits.empty:
+                st.info("Koi stock currently exit zone mein nahi hai.")
+            else:
+                xc = ["Ticker", "Name", "CMP", "Entry Trigger Price",
+                      "Exit Trigger Price", "Margin of Safety %",
+                      "AI_Score", "Valuation Action"]
+                xc = [c for c in xc if c in exit_hits.columns]
+                st.dataframe(
+                    exit_hits[xc].style
+                    .map(style_valuation, subset=["Valuation Action"])
+                    .format({"CMP": "₹{:,.2f}",
+                             "Entry Trigger Price": "₹{:,.2f}",
+                             "Exit Trigger Price": "₹{:,.2f}",
+                             "Margin of Safety %": "{:+.2f}%",
+                             "AI_Score": "{:.0f}"}, na_rep="—"),
+                    use_container_width=True, hide_index=True,
+                    height=min(500, 40 + 35 * len(exit_hits)))
+
         st.divider()
-    cc = st.columns(2)
-    mms = cc[0].slider("Min MoS %", -100, 100, -100, 5)
-    sigs = cc[1].multiselect("Valuation Signal",
-                             sorted(val["Valuation Signal"].dropna().unique().tolist()),
-                             default=sorted(val["Valuation Signal"].dropna().unique().tolist()))
-    sc = detect_sector_column(val)
-    if sc:
-        so = ["All"] + sorted(val[sc].dropna().unique().tolist())
-        sf = st.selectbox("Sub-Sector", so)
-    else: sf = "All"
+
+    # Filters
+    with st.expander("🔎 Valuation Filters", expanded=False):
+        mms = st.slider("Min MoS %", -100, 100, -100, 5)
+        sigs = st.multiselect("Valuation Signal",
+                              sorted(val["Valuation Signal"].dropna().unique().tolist()),
+                              default=sorted(val["Valuation Signal"].dropna().unique().tolist()))
+        sc = detect_sector_column(val)
+        if sc:
+            so = ["All"] + sorted(val[sc].dropna().unique().tolist())
+            sf = st.selectbox("Sub-Sector", so)
+        else:
+            sf = "All"
+
     f = val[val["Margin of Safety %"].ge(mms) & val["Valuation Signal"].isin(sigs)]
     if sf != "All" and sc: f = f[f[sc] == sf]
     f = f.copy().sort_values("Margin of Safety %", ascending=False,
                              kind="stable").reset_index(drop=True)
     sc2 = detect_sector_column(f)
     if sc2 and "Sector" not in f.columns: f = f.rename(columns={sc2: "Sector"})
-    cols = ["Rank", "Ticker", "Name", "Sector", "CMP", "Lower Intrinsic Value",
-            "Intrinsic Value (Base)", "Upper Intrinsic Value",
-            "Intrinsic Value (DCF)", "Intrinsic Value (Multiples)", "WACC Used",
-            "Margin of Safety %", "Valuation Signal", "Valuation Action",
-            "Entry Trigger Price", "Exit Trigger Price", "To Entry %", "To Exit %",
-            "AI_Score", "AI Signal", "DCF_Valuation_Score", "Valuation_Trigger_Score"]
-    cols = [c for c in cols if c in f.columns]
-    st.subheader(f"📋 Valuation Table ({len(f)})")
-    st.dataframe(f[cols].style
-        .map(style_valuation, subset=["Valuation Signal"])
-        .map(style_valuation, subset=["Valuation Action"])
-        .map(style_signal, subset=["AI Signal"])
-        .format({"CMP": "₹{:,.2f}", "Lower Intrinsic Value": "₹{:,.2f}",
-                 "Intrinsic Value (Base)": "₹{:,.2f}", "Upper Intrinsic Value": "₹{:,.2f}",
-                 "Intrinsic Value (DCF)": "₹{:,.2f}",
-                 "Intrinsic Value (Multiples)": "₹{:,.2f}",
-                 "Entry Trigger Price": "₹{:,.2f}", "Exit Trigger Price": "₹{:,.2f}",
-                 "WACC Used": "{:.1%}", "Margin of Safety %": "{:+.2f}%",
-                 "To Entry %": "{:+.2f}%", "To Exit %": "{:+.2f}%",
-                 "AI_Score": "{:.0f}", "DCF_Valuation_Score": "{:.0f}",
-                 "Valuation_Trigger_Score": "{:.0f}"}, na_rep="—"),
-        use_container_width=True, hide_index=True, height=560)
-    st.download_button("⬇️ Download Valuation Report",
-                       data=f[cols].to_csv(index=False).encode("utf-8"),
-                       file_name=f"dcf_valuation_{datetime.now():%Y%m%d_%H%M}.csv",
-                       mime="text/csv")
+
+    # Full Table + Scatter as TABS
+    table_tab, chart_tab = st.tabs([f"📋 Full Table ({len(f)})", "📊 Price vs IV"])
+
+    with table_tab:
+        cols = ["Rank", "Ticker", "Name", "Sector", "CMP", "Lower Intrinsic Value",
+                "Intrinsic Value (Base)", "Upper Intrinsic Value",
+                "Intrinsic Value (DCF)", "Intrinsic Value (Multiples)", "WACC Used",
+                "Margin of Safety %", "Valuation Signal", "Valuation Action",
+                "Entry Trigger Price", "Exit Trigger Price", "To Entry %", "To Exit %",
+                "AI_Score", "AI Signal", "DCF_Valuation_Score", "Valuation_Trigger_Score"]
+        cols = [c for c in cols if c in f.columns]
+        st.dataframe(f[cols].style
+            .map(style_valuation, subset=["Valuation Signal"])
+            .map(style_valuation, subset=["Valuation Action"])
+            .map(style_signal, subset=["AI Signal"])
+            .format({"CMP": "₹{:,.2f}", "Lower Intrinsic Value": "₹{:,.2f}",
+                     "Intrinsic Value (Base)": "₹{:,.2f}",
+                     "Upper Intrinsic Value": "₹{:,.2f}",
+                     "Intrinsic Value (DCF)": "₹{:,.2f}",
+                     "Intrinsic Value (Multiples)": "₹{:,.2f}",
+                     "Entry Trigger Price": "₹{:,.2f}",
+                     "Exit Trigger Price": "₹{:,.2f}",
+                     "WACC Used": "{:.1%}", "Margin of Safety %": "{:+.2f}%",
+                     "To Entry %": "{:+.2f}%", "To Exit %": "{:+.2f}%",
+                     "AI_Score": "{:.0f}", "DCF_Valuation_Score": "{:.0f}",
+                     "Valuation_Trigger_Score": "{:.0f}"}, na_rep="—"),
+            use_container_width=True, hide_index=True, height=560)
+        st.download_button("⬇️ Download Valuation Report",
+                           data=f[cols].to_csv(index=False).encode("utf-8"),
+                           file_name=f"dcf_valuation_{datetime.now():%Y%m%d_%H%M}.csv",
+                           mime="text/csv")
+
+    with chart_tab:
+        if go is not None:
+            pd_ = f.dropna(subset=["CMP", "Intrinsic Value (Base)"]).copy()
+            if not pd_.empty:
+                pd_["Zone"] = np.where(pd_["Margin of Safety %"] >= 10, "Undervalued",
+                    np.where(pd_["Margin of Safety %"] <= -10, "Overvalued", "Fair"))
+                fig = px.scatter(pd_, x="CMP", y="Intrinsic Value (Base)",
+                    color="Zone", size="AI_Score",
+                    hover_data=["Ticker", "Name", "Margin of Safety %"],
+                    color_discrete_map={"Undervalued": "#34d399", "Fair": "#fbbf24",
+                                        "Overvalued": "#fb7185"})
+                mv = float(max(pd_["CMP"].max(), pd_["Intrinsic Value (Base)"].max()))
+                fig.add_trace(go.Scatter(x=[0, mv], y=[0, mv], mode="lines",
+                    name="Fair Value",
+                    line=dict(color="#8ba3c0", dash="dash", width=1.5)))
+                fig.update_layout(title="Above dashed line = undervalued",
+                    xaxis_title="Market Price (₹)", yaxis_title="Intrinsic Value (₹)")
+                _style_figure(fig, 500)
+                st.plotly_chart(fig, use_container_width=True)
 
 # ============= OTHER TABS =============
 def render_sector_tab(scored, project_dir):
@@ -1372,12 +1455,6 @@ def render_risk_tab(scored):
     st.subheader("⚖️ Risk Analytics")
     if "Sharpe" not in scored.columns or scored["Sharpe"].isna().all():
         st.info("Risk data missing."); return
-    m = st.columns(2)
-    m[0].metric("Avg Sharpe", f"{scored['Sharpe'].mean():.2f}")
-    m[1].metric("Avg Beta", f"{scored['Beta'].mean():.2f}")
-    m = st.columns(2)
-    m[0].metric("Beating Nifty", f"{(scored['Return 1Y %'] > scored['Nifty 1Y %']).sum()}/{len(scored)}")
-    m[1].metric("Avg Alpha", f"{scored['Alpha %'].mean():+.2f}%")
     cs = ["Rank", "Ticker", "Name", "Sharpe", "Sortino", "Volatility %",
           "Max Drawdown %", "Beta", "Alpha %", "Return 1Y %", "Nifty 1Y %",
           "Relative Strength %"]
@@ -1392,12 +1469,6 @@ def render_risk_tab(scored):
 def render_flags_tab(scored):
     st.subheader("🚩 Red Flag Scanner")
     if "Red Flag Count" not in scored.columns: return
-    c = st.columns(2)
-    c[0].metric("Grade A", f"{(scored['Quality Grade'] == 'A — Clean').sum()}")
-    c[1].metric("Grade B", f"{(scored['Quality Grade'] == 'B — Minor').sum()}")
-    c = st.columns(2)
-    c[0].metric("Grade C", f"{(scored['Quality Grade'] == 'C — Watch').sum()}")
-    c[1].metric("Grade D", f"{(scored['Quality Grade'] == 'D — High Risk').sum()}")
     fl = scored[scored["Red Flag Count"] > 0].sort_values(
         ["Red Flag Count", "AI_Score"], ascending=[False, False])
     cs = ["Rank", "Ticker", "Name", "Sector", "AI_Score", "AI Signal", "Red Flag Count",
@@ -1427,13 +1498,20 @@ def render_quality_tab(scored):
     st.subheader("🔍 Data Quality")
     tot = len(scored)
     fok = int((scored.get("Fetch Status", pd.Series()) == "OK").sum())
-    c = st.columns(2)
-    c[0].metric("Total", tot)
-    c[1].metric("Fetch OK", f"{fok}/{tot}")
     sc = detect_sector_column(scored)
-    c = st.columns(2)
-    c[0].metric("Sector Data", f"{scored[sc].notna().sum()}/{tot}" if sc else "—")
-    c[1].metric("Valuation OK", f"{scored.get('Intrinsic Value (Base)', pd.Series()).notna().sum()}/{tot}")
+    val_ok = scored.get('Intrinsic Value (Base)', pd.Series()).notna().sum()
+    st.markdown(f"""
+    <div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="kpi-card"><div class="kpi-label">Total</div>
+            <div class="kpi-value">{tot}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Fetch OK</div>
+            <div class="kpi-value">{fok}/{tot}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Sector Data</div>
+            <div class="kpi-value">{scored[sc].notna().sum()}/{tot if sc else 0}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Valuation OK</div>
+            <div class="kpi-value">{val_ok}/{tot}</div></div>
+    </div>
+    """, unsafe_allow_html=True)
 
 def render_trade_tab(scored):
     st.subheader("💼 Trade Plan")
@@ -1458,19 +1536,29 @@ def render_deep_tab(scored):
     t = st.selectbox("Ticker", scored["Ticker"].tolist())
     if not t: return
     row = scored.loc[scored["Ticker"] == t].iloc[0]
-    c = st.columns(2)
-    c[0].metric("CMP", fmt_money(row.get("CMP")))
-    c[1].metric("AI Score", f"{row.get('AI_Score', 0):.0f}", row.get("AI Signal", "—"))
-    c = st.columns(2)
-    c[0].metric("MoS", f"{row.get('Margin of Safety %', 0):+.1f}%")
-    c[1].metric("Action", row.get("Valuation Action", "—"))
-    c = st.columns(2)
-    c[0].metric("Intrinsic", fmt_money(row.get("Intrinsic Value (Base)")))
-    c[1].metric("Upside", f"{row.get('Upside %', 0):+.2f}%")
-    ec1, ec2 = st.columns(2)
-    ec1.metric("🎯 Entry", fmt_money(row.get("Entry Trigger Price")))
-    ec2.metric("🚪 Exit", fmt_money(row.get("Exit Trigger Price")))
-    tabs = st.tabs(["📈 Chart", "💰 Valuation", "🎯 Triggers", "🧮 Fundamentals"])
+    st.markdown(f"""
+    <div class="kpi-grid" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="kpi-card"><div class="kpi-label">CMP</div>
+            <div class="kpi-value">{fmt_money(row.get("CMP"))}</div></div>
+        <div class="kpi-card"><div class="kpi-label">AI Score</div>
+            <div class="kpi-value">{row.get('AI_Score', 0):.0f}</div></div>
+        <div class="kpi-card"><div class="kpi-label">MoS</div>
+            <div class="kpi-value">{row.get('Margin of Safety %', 0):+.1f}%</div></div>
+        <div class="kpi-card"><div class="kpi-label">Action</div>
+            <div class="kpi-value" style="font-size:1rem;">{row.get("Valuation Action", "—")}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Intrinsic</div>
+            <div class="kpi-value">{fmt_money(row.get("Intrinsic Value (Base)"))}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Upside</div>
+            <div class="kpi-value">{row.get('Upside %', 0):+.2f}%</div></div>
+        <div class="kpi-card"><div class="kpi-label">🎯 Entry</div>
+            <div class="kpi-value">{fmt_money(row.get("Entry Trigger Price"))}</div></div>
+        <div class="kpi-card"><div class="kpi-label">🚪 Exit</div>
+            <div class="kpi-value">{fmt_money(row.get("Exit Trigger Price"))}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Trigger Score</div>
+            <div class="kpi-value">{row.get('Valuation_Trigger_Score', 0):.0f}</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+    tabs = st.tabs(["📈 Chart", "💰 Valuation", "🧮 Fundamentals"])
     with tabs[0]: render_price_chart(t)
     with tabs[1]:
         vd = {k: row.get(k) for k in
@@ -1480,12 +1568,6 @@ def render_deep_tab(scored):
                "Valuation Signal", "DCF_Valuation_Score"] if k in row}
         st.json({k: (None if pd.isna(v) else v) for k, v in vd.items()})
     with tabs[2]:
-        td = {k: row.get(k) for k in
-              ["Valuation Action", "Valuation_Trigger_Score", "Entry Trigger Price",
-               "Exit Trigger Price", "CMP", "To Entry %", "To Exit %",
-               "Margin of Safety %", "Valuation Signal"] if k in row}
-        st.json({k: (None if pd.isna(v) else v) for k, v in td.items()})
-    with tabs[3]:
         fd = {k: row.get(k) for k in
               ["PE Ratio", "PB Ratio", "EV/EBITDA Ratio", "Return on Equity", "ROCE",
                "Net Profit Margin", "Debt to Equity", "Promoter Holding", "Dividend Yield"]
