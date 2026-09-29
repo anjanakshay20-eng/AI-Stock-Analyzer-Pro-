@@ -1,4 +1,4 @@
-"""AI Stock Analyzer Pro — v8 Complete."""
+"""AI Stock Analyzer Pro — v9 Complete."""
 
 from __future__ import annotations
 import concurrent.futures, io, json, logging
@@ -57,7 +57,7 @@ TAB_META = {
 DEFAULT_TAB_ORDER = ["screener", "dcf", "deep", "hybrid", "trade",
                      "peers", "indices", "patterns", "quality"]
 
-# ⭐ CHANGE 2 + 3 + 4: Added SMA 100, EMA 100, Pivot Points; changed 52W colors to yellow
+# ⭐ Fibonacci retracement REMOVED. Only Fib Pivots remains.
 CHART_OVERLAYS = {
     "SMA 20":  {"color": "#fbbf24", "kind": "sma", "window": 20,  "col": "20 DMA"},
     "SMA 50":  {"color": "#60a5fa", "kind": "sma", "window": 50,  "col": "50 DMA"},
@@ -75,7 +75,6 @@ CHART_OVERLAYS = {
     "PSAR": {"color": "#8b5cf6", "kind": "psar"},
     "52W High": {"color": "#fbbf24", "kind": "52w_high", "col": "52W High"},
     "52W Low":  {"color": "#fbbf24", "kind": "52w_low",  "col": "52W Low"},
-    "Fibonacci": {"color": "#a78bfa", "kind": "fibonacci"},
     "Fib Pivots": {"color": "#f59e0b", "kind": "fib_pivots"},
 }
 CHART_SUBPLOTS = ["Volume", "RSI", "MACD", "Stochastic", "ADX", "ATR", "OBV"]
@@ -456,7 +455,6 @@ def _compute_indicators(data):
     close, high, low, volume = data["Close"], data["High"], data["Low"], data["Volume"]
     if len(data) < 200 or not np.isfinite(close.iloc[-1]) or close.iloc[-1] <= 0:
         return {"Technical_Score": 50.0}
-    # ⭐ CHANGE 2: Added SMA 100 and EMA 100
     sma = {n: close.rolling(n).mean() for n in (20, 50, 100, 200)}
     ema = {n: close.ewm(span=n, adjust=False).mean() for n in (20, 50, 100, 200)}
     delta = close.diff()
@@ -515,7 +513,6 @@ def _compute_indicators(data):
     vol_s = 100 if ap <= 1.5 else 70 if ap <= 2.5 else 40 if ap <= 4 else 10
     sr_s = 100 if cmp > pivot else 40
     tech = (ts + ms_val + vs + vol_s + sr_s) / 5
-    # ⭐ CHANGE 2: Added 100 DMA and EMA100
     return {"CMP": cmp, "20 DMA": float(sma[20].iloc[-1]), "50 DMA": float(sma[50].iloc[-1]),
         "100 DMA": float(sma[100].iloc[-1]), "200 DMA": float(sma[200].iloc[-1]),
         "RSI": float(rsi_v), "EMA20": float(ema[20].iloc[-1]), "EMA50": float(ema[50].iloc[-1]),
@@ -920,27 +917,10 @@ def _compute_overlay_series(h, kind, window=None):
     if kind == "52w_low":
         l52 = float(low.tail(252).min()) if len(low) >= 252 else float(low.min())
         return pd.Series(l52, index=h.index)
-    if kind in ("fibonacci", "fib_pivots"):
+    if kind == "fib_pivots":
         return None
     return None
 
-def _compute_fibonacci_levels(h):
-    high = h["High"]; low = h["Low"]
-    hi = float(high.tail(252).max()) if len(high) >= 252 else float(high.max())
-    lo = float(low.tail(252).min()) if len(low) >= 252 else float(low.min())
-    diff = hi - lo
-    if diff <= 0: return {}
-    return {
-        "0.0% (High)":  hi,
-        "23.6%":        hi - 0.236 * diff,
-        "38.2%":        hi - 0.382 * diff,
-        "50.0%":        hi - 0.500 * diff,
-        "61.8%":        hi - 0.618 * diff,
-        "78.6%":        hi - 0.786 * diff,
-        "100.0% (Low)": lo,
-    }
-
-# ⭐ CHANGE 4: Fibonacci Pivot Points
 def _compute_fib_pivots(h):
     """Fibonacci Pivot Points using last completed bar's H/L/C."""
     high = h["High"]; low = h["Low"]; close = h["Close"]
@@ -1013,7 +993,7 @@ def render_price_chart(ticker, row=None):
         st.session_state[show_key] = True
     leg_key = f"chart_show_legend_{ticker}"
     if leg_key not in st.session_state:
-        st.session_state[leg_key] = False  # ⭐ CHANGE 1: Legend hidden by default
+        st.session_state[leg_key] = False
 
     if st.session_state[show_key]:
         with st.expander("⚙️ Chart Settings", expanded=True):
@@ -1056,7 +1036,6 @@ def render_price_chart(ticker, row=None):
             if st.button("⚙️ Settings", key=f"edit_{ticker}", use_container_width=True):
                 st.session_state[show_key] = True; st.rerun()
         with ec3:
-            # ⭐ CHANGE 1: Legend toggle button
             show_leg = st.session_state.get(leg_key, False)
             lbl = "📖 Hide" if show_leg else "📖 Legend"
             if st.button(lbl, key=f"leg_{ticker}", use_container_width=True):
@@ -1096,35 +1075,40 @@ def render_price_chart(ticker, row=None):
         meta = CHART_OVERLAYS[ov_name]
         kind = meta["kind"]
 
-        # Fibonacci retracement
-        if kind == "fibonacci":
-            fib_levels = _compute_fibonacci_levels(h)
-            palette = ["#ef4444", "#f59e0b", "#fbbf24", "#34d399", "#10b981",
-                       "#06b6d4", "#8b5cf6"]
-            for i, (lbl, price) in enumerate(fib_levels.items()):
-                fig.add_trace(go.Scatter(
-                    x=[h.index[0], h.index[-1]], y=[price, price],
-                    mode="lines", name=f"Fib {lbl}: ₹{price:,.2f}",
-                    line=dict(color=palette[i % len(palette)], width=1, dash="dot"),
-                    hovertemplate=f"Fib {lbl}: ₹{price:,.2f}<extra></extra>",
-                ), row=1, col=1)
-            continue
-
-        # ⭐ CHANGE 4: Fibonacci Pivot Points (P, R1-R3, S1-S3)
+        # ⭐ Fib Pivots — TradingView style: orange dashed lines with right-edge labels
         if kind == "fib_pivots":
             pivots = _compute_fib_pivots(h)
-            color_map = {
-                "R3": "#ef4444", "R2": "#f97316", "R1": "#fb923c",
-                "P":  "#fbbf24",
-                "S1": "#84cc16", "S2": "#22c55e", "S3": "#10b981",
-            }
-            for lbl, price in pivots.items():
-                fig.add_trace(go.Scatter(
-                    x=[h.index[0], h.index[-1]], y=[price, price],
-                    mode="lines", name=f"{lbl}: ₹{price:,.2f}",
-                    line=dict(color=color_map.get(lbl, "#8ba3c0"), width=1.5, dash="dash"),
-                    hovertemplate=f"{lbl}: ₹{price:,.2f}<extra></extra>",
-                ), row=1, col=1)
+            if pivots:
+                price_min = float(h["Low"].min())
+                price_max = float(h["High"].max())
+                price_range = max(price_max - price_min, 1e-6)
+                for lbl, price in pivots.items():
+                    if price < price_min - 0.3 * price_range:
+                        continue
+                    if price > price_max + 0.3 * price_range:
+                        continue
+                    fig.add_trace(go.Scatter(
+                        x=[h.index[0], h.index[-1]],
+                        y=[price, price],
+                        mode="lines",
+                        name=f"Piv {lbl}",
+                        line=dict(color="#f59e0b", width=1, dash="dash"),
+                        hovertemplate=f"<b>{lbl}</b>: ₹{price:,.2f}<extra></extra>",
+                        showlegend=False,
+                    ), row=1, col=1)
+                    fig.add_annotation(
+                        x=h.index[-1],
+                        y=price,
+                        text=f"{lbl} {price:,.1f}",
+                        showarrow=False,
+                        xanchor="left",
+                        xshift=4,
+                        font=dict(size=10, color="#f59e0b", family="sans-serif"),
+                        bgcolor="rgba(7,13,24,0.85)",
+                        bordercolor="rgba(245,158,11,0.4)",
+                        borderwidth=1,
+                        row=1, col=1,
+                    )
             continue
 
         line = _compute_overlay_series(h, kind, meta.get("window"))
@@ -1138,7 +1122,7 @@ def render_price_chart(ticker, row=None):
         legend_name = (f"{ov_name}: ₹{display_val:,.2f}"
                        if display_val is not None else ov_name)
 
-        # ⭐ CHANGE 3: SuperTrend dynamic colors (green=buy, red=sell)
+        # SuperTrend — dynamic green (buy) / red (sell) segments
         if kind == "supertrend":
             uptrend = line.where(line < close_series)
             downtrend = line.where(line >= close_series)
@@ -1156,7 +1140,7 @@ def render_price_chart(ticker, row=None):
             ), row=1, col=1)
             continue
 
-        # ⭐ CHANGE 3: 52W High/Low both yellow
+        # 52W High/Low both yellow
         if kind in ("52w_high", "52w_low"):
             fig.add_trace(go.Scatter(
                 x=[h.index[0], h.index[-1]], y=[display_val, display_val],
@@ -1177,7 +1161,6 @@ def render_price_chart(ticker, row=None):
         for tr in _build_subplot_trace(h, sp_name):
             fig.add_trace(tr, row=i, col=1)
 
-    # ⭐ CHANGE 1: Legend visibility controlled by toggle
     if show_legend:
         legend_cfg = dict(
             orientation="v", yanchor="top", y=0.99,
@@ -1195,7 +1178,7 @@ def render_price_chart(ticker, row=None):
         title=f"{ticker} — {selected} Price Action",
         legend=legend_cfg,
         showlegend=show_legend,
-        margin=dict(t=50, b=30, l=20, r=20),
+        margin=dict(t=50, b=30, l=20, r=90),
         dragmode="pan",
     )
     fig.update_xaxes(gridcolor="#1c2e45", zerolinecolor="#1c2e45")
@@ -1238,7 +1221,6 @@ def _gauge_chart(value, title):
         font={"color": "#8ba3c0"}, height=250, margin={"t": 55, "b": 10, "l": 20, "r": 20})
     return fig
 
-# ⭐ CHANGE 2: Added 100 DMA and EMA100 to detailed indicators
 def render_technical_analysis(row):
     st.markdown("### 📊 Technical Analysis")
     def _safe(v):
