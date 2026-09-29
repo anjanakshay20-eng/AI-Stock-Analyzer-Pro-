@@ -1,7 +1,9 @@
-"""AI Stock Analyzer Pro — TradingView-Style Native Mobile UI.
+"""AI Stock Analyzer Pro — TradingView-Style Native UI (v3).
 
-10-dimension AI Score + Hybrid DCF + Entry/Exit Triggers.
-Features card-based UI with horizontal scrolling, colored borders, and native app feel.
+3 targeted changes:
+  1. Fixed horizontal scroll on Top Entry Opportunities
+  2. DCF Trigger Alerts by Valuation Signal with full data cards
+  3. Deep Dive: Technical Analysis tab + Chart time ranges (1D/1W/1M/3M/6M/1Y/5Y)
 """
 
 from __future__ import annotations
@@ -892,6 +894,24 @@ def fetch_chart_history(ticker, period=PRICE_PERIOD):
         h[f"SMA{w}"] = h["Close"].rolling(w).mean()
     return h
 
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def _fetch_chart_for_period(ticker, period, interval):
+    """Fetch OHLC for specific period+interval with SMA overlays."""
+    sym = ticker if ticker.endswith((".NS", ".BO")) else f"{ticker}.NS"
+    try:
+        h = yf.download(sym, period=period, interval=interval,
+                        progress=False, auto_adjust=False, threads=False)
+    except Exception as exc:
+        LOGGER.warning("Chart fail %s: %s", sym, exc)
+        return pd.DataFrame()
+    if h.empty:
+        return pd.DataFrame()
+    h = _flatten_columns(h).copy().dropna(subset=["Close"])
+    for w in (20, 50, 200):
+        if len(h) >= w:
+            h[f"SMA{w}"] = h["Close"].rolling(w).mean()
+    return h
+
 _PLOT_LAYOUT = {"paper_bgcolor": "rgba(0,0,0,0)", "plot_bgcolor": "#070d18",
                 "font": {"color": "#8ba3c0"},
                 "margin": {"t": 24, "b": 24, "l": 24, "r": 24}}
@@ -902,22 +922,200 @@ def _style_figure(fig, height=340):
     fig.update_yaxes(gridcolor="#1c2e45", zerolinecolor="#1c2e45")
     return fig
 
+# ============= ⭐ CHANGE 3: CHART WITH TIME RANGES =============
 def render_price_chart(ticker):
-    if go is None: st.info("`pip install plotly` karein."); return
-    h = fetch_chart_history(ticker)
-    if h.empty: st.warning(f"{ticker} chart data nahi mila."); return
+    if go is None:
+        st.info("`pip install plotly` karein.")
+        return
+
+    # Time range buttons
+    period_opts = [
+        ("1D", "1d", "5m"), ("1W", "5d", "30m"), ("1M", "1mo", "1d"),
+        ("3M", "3mo", "1d"), ("6M", "6mo", "1d"), ("1Y", "1y", "1d"),
+        ("5Y", "5y", "1d"),
+    ]
+    state_key = f"chart_period_{ticker}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = "1Y"
+
+    cols = st.columns(len(period_opts))
+    for i, (label, _, _) in enumerate(period_opts):
+        with cols[i]:
+            active = st.session_state[state_key] == label
+            if st.button(label, key=f"period_{ticker}_{label}",
+                         use_container_width=True,
+                         type="primary" if active else "secondary"):
+                st.session_state[state_key] = label
+                st.rerun()
+
+    selected = st.session_state[state_key]
+    period, interval = next((p, i) for lbl, p, i in period_opts if lbl == selected)
+
+    h = _fetch_chart_for_period(ticker, period, interval)
+    if h.empty:
+        st.warning(f"{ticker} ka chart data nahi mila for {selected}.")
+        return
+
     fig = go.Figure()
-    fig.add_trace(go.Candlestick(x=h.index, open=h["Open"], high=h["High"],
+    fig.add_trace(go.Candlestick(
+        x=h.index, open=h["Open"], high=h["High"],
         low=h["Low"], close=h["Close"], name=ticker,
-        increasing_line_color="#34d399", decreasing_line_color="#fb7185"))
+        increasing_line_color="#34d399",
+        decreasing_line_color="#fb7185"))
     for w, c in ((20, "#fbbf24"), (50, "#60a5fa"), (200, "#a78bfa")):
         col = f"SMA{w}"
-        if col in h:
+        if col in h and h[col].notna().any():
             fig.add_trace(go.Scatter(x=h.index, y=h[col], mode="lines", name=col,
                                      line=dict(color=c, width=1.4)))
-    fig.update_layout(xaxis_rangeslider_visible=False, title=f"{ticker} — 1Y Price Action")
+    fig.update_layout(xaxis_rangeslider_visible=False,
+                      title=f"{ticker} — {selected} Price Action")
     _style_figure(fig, 460)
     st.plotly_chart(fig, use_container_width=True)
+
+
+# ============= ⭐ CHANGE 3: TECHNICAL GAUGES =============
+def _gauge_chart(value, title):
+    """TradingView-style semicircle gauge."""
+    try:
+        value = float(value) if pd.notna(value) else 50.0
+    except Exception:
+        value = 50.0
+
+    if value >= 75:
+        color, label = "#10b981", "Strong Buy"
+    elif value >= 60:
+        color, label = "#34d399", "Buy"
+    elif value >= 45:
+        color, label = "#fbbf24", "Neutral"
+    elif value >= 30:
+        color, label = "#fb923c", "Sell"
+    else:
+        color, label = "#fb7185", "Strong Sell"
+
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=value,
+        number={"font": {"color": "#e5eefb", "size": 26}},
+        title={"text": f"{title}<br><span style='font-size:0.75em;color:{color};font-weight:700'>{label}</span>",
+               "font": {"color": "#8ba3c0", "size": 13}},
+        gauge={
+            "shape": "angular",
+            "axis": {"range": [0, 100], "tickwidth": 1,
+                     "tickcolor": "#8ba3c0", "tickfont": {"size": 9}},
+            "bar": {"color": color, "thickness": 0.35},
+            "bgcolor": "rgba(0,0,0,0)",
+            "borderwidth": 0,
+            "steps": [
+                {"range": [0, 30], "color": "rgba(251, 113, 133, 0.18)"},
+                {"range": [30, 45], "color": "rgba(251, 146, 60, 0.18)"},
+                {"range": [45, 60], "color": "rgba(251, 191, 36, 0.18)"},
+                {"range": [60, 75], "color": "rgba(52, 211, 153, 0.18)"},
+                {"range": [75, 100], "color": "rgba(16, 185, 129, 0.18)"},
+            ],
+            "threshold": {"line": {"color": "#ffffff", "width": 2},
+                          "thickness": 0.8, "value": value}
+        }
+    ))
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={"color": "#8ba3c0"},
+        height=250,
+        margin={"t": 55, "b": 10, "l": 20, "r": 20}
+    )
+    return fig
+
+
+def render_technical_analysis(row):
+    """Technical analysis tab — gauges + detailed metrics."""
+    st.markdown("### 📊 Technical Analysis")
+
+    def _safe(v):
+        try:
+            if pd.isna(v): return 50.0
+            return float(v)
+        except Exception:
+            return 50.0
+
+    tech_score = _safe(row.get("Technical_Score", 50))
+    analyst_score = _safe(row.get("Analyst_Consensus_Score", 50))
+    fund_score = _safe(row.get("Fundamental_Score_AI", 50))
+    dcf_score = _safe(row.get("DCF_Valuation_Score", 50))
+    sector_score = _safe(row.get("Sector_Relative_Score", 50))
+    trigger_score = _safe(row.get("Valuation_Trigger_Score", 50))
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.plotly_chart(_gauge_chart(tech_score, "Technical Rating"),
+                        use_container_width=True)
+    with c2:
+        st.plotly_chart(_gauge_chart(analyst_score, "Analyst Rating"),
+                        use_container_width=True)
+
+    c3, c4 = st.columns(2)
+    with c3:
+        st.plotly_chart(_gauge_chart(fund_score, "Fundamental Score"),
+                        use_container_width=True)
+    with c4:
+        st.plotly_chart(_gauge_chart(dcf_score, "Valuation Score"),
+                        use_container_width=True)
+
+    c5, c6 = st.columns(2)
+    with c5:
+        st.plotly_chart(_gauge_chart(sector_score, "Sector Relative"),
+                        use_container_width=True)
+    with c6:
+        st.plotly_chart(_gauge_chart(trigger_score, "Entry/Exit Trigger"),
+                        use_container_width=True)
+
+    # Analyst rating summary
+    st.markdown("### 👥 Analyst Rating")
+    ac1, ac2, ac3 = st.columns(3)
+    buy_pct = row.get("Percentage Buy Reco's", 0)
+    sell_pct = row.get("Percentage Sell Reco's", 0)
+    n_analysts = row.get("Total no. of analysts", 0)
+    ac1.metric("Buy %", f"{(buy_pct if pd.notna(buy_pct) else 0):.0f}%")
+    ac2.metric("Sell %", f"{(sell_pct if pd.notna(sell_pct) else 0):.0f}%")
+    ac3.metric("Analysts", f"{int(n_analysts if pd.notna(n_analysts) else 0)}")
+
+    st.markdown("### 📈 Detailed Indicators")
+    key_indicators = {
+        "CMP": row.get("CMP"), "RSI (14D)": row.get("RSI"),
+        "ADX": row.get("ADX"), "ATR": row.get("ATR"),
+        "MACD Signal": row.get("MACDSignal"), "Histogram": row.get("Histogram"),
+        "20 DMA": row.get("20 DMA"), "50 DMA": row.get("50 DMA"),
+        "200 DMA": row.get("200 DMA"), "EMA20": row.get("EMA20"),
+        "EMA50": row.get("EMA50"), "EMA200": row.get("EMA200"),
+        "DI Plus": row.get("DI Plus"), "DI Minus": row.get("DI Minus"),
+        "SuperTrend": row.get("SuperTrend"), "SuperTrend Val": row.get("SuperTrend_Val"),
+        "Trend Pivot": row.get("Trend Pivot"),
+        "R1": row.get("R1"), "R2": row.get("R2"), "R3": row.get("R3"),
+        "S1": row.get("S1"), "S2": row.get("S2"), "S3": row.get("S3"),
+        "52W High": row.get("52W High"), "52W Low": row.get("52W Low"),
+        "Volume": row.get("Volume"), "Avg Volume": row.get("Avg Volume"),
+        "Trend Score": row.get("Trend Score"), "Momentum Score": row.get("Momentum Score"),
+        "Volume Score": row.get("Volume Score"),
+        "Volatility Score": row.get("Volatility Score"),
+        "Support Resistance Score": row.get("Support Resistance Score"),
+    }
+    display = {}
+    for k, v in key_indicators.items():
+        if k not in row.index: continue
+        if pd.isna(v): display[k] = None
+        elif isinstance(v, (int, float, np.number)): display[k] = float(v)
+        else: display[k] = str(v)
+    st.json(display)
+
+    # Pattern pills
+    if "Patterns" in row.index and pd.notna(row.get("Patterns")):
+        st.markdown("### 📐 Detected Patterns")
+        patterns = str(row.get("Patterns", "")).split(", ")
+        pill_html = ""
+        for p in patterns:
+            if p and p != "—":
+                pill_html += f'<span style="display:inline-block;padding:4px 12px;margin:4px;background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);border-radius:12px;font-size:0.75rem;color:#60a5fa;font-weight:600;">{p}</span>'
+        if pill_html:
+            st.markdown(f"<div>{pill_html}</div>", unsafe_allow_html=True)
 
 # ============= UI HELPERS =============
 def style_signal(v):
@@ -939,9 +1137,9 @@ def style_valuation(v):
 def fmt_money(v):
     return f"₹{v:,.2f}" if pd.notna(v) and v > 0 else "—"
 
-# ============= BULLETPROOF TRADINGVIEW-STYLE CSS =============
+# ============= CSS WITH SCROLL FIX (CHANGE 1) =============
 def inject_mobile_css():
-    """TradingView-style native mobile UI."""
+    """TradingView-style native mobile UI + fixed scrollbar."""
     st.markdown("""
     <style>
     html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
@@ -953,7 +1151,7 @@ def inject_mobile_css():
     body, .main, section.main { overflow-x: hidden !important; }
     footer { display: none !important; }
 
-    /* ============ KPI GRID ============ */
+    /* KPI GRID */
     .kpi-grid {
         display: grid;
         grid-template-columns: repeat(6, 1fr);
@@ -1009,7 +1207,7 @@ def inject_mobile_css():
     .kpi-card .kpi-delta.down { color: #fb7185; }
     .kpi-card .kpi-delta.neutral { color: #fbbf24; }
 
-    /* ============ STOCK CARDS ============ */
+    /* STOCK CARDS */
     .stock-card {
         background: linear-gradient(145deg, #0d1424 0%, #0a0f1c 100%);
         border: 1px solid rgba(139, 163, 192, 0.12);
@@ -1133,22 +1331,43 @@ def inject_mobile_css():
         border: 1px solid rgba(251, 191, 36, 0.3);
     }
 
-    /* Horizontal scroll row */
+    /* ⭐ CHANGE 1: FIXED HORIZONTAL SCROLL */
     .stock-scroll {
-        display: flex;
-        gap: 10px;
-        overflow-x: auto;
-        padding: 4px 0 12px 0;
-        scrollbar-width: none;
-        -ms-overflow-style: none;
-        scroll-snap-type: x mandatory;
+        display: flex !important;
+        gap: 12px !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        padding: 4px 0 14px 0 !important;
+        scroll-snap-type: x proximity !important;
+        -webkit-overflow-scrolling: touch !important;
+        touch-action: pan-x !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(96, 165, 250, 0.5) rgba(255, 255, 255, 0.05) !important;
     }
-    .stock-scroll::-webkit-scrollbar { display: none; }
+    .stock-scroll::-webkit-scrollbar {
+        height: 8px !important;
+        display: block !important;
+    }
+    .stock-scroll::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.04) !important;
+        border-radius: 4px !important;
+    }
+    .stock-scroll::-webkit-scrollbar-thumb {
+        background: rgba(96, 165, 250, 0.5) !important;
+        border-radius: 4px !important;
+    }
+    .stock-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(96, 165, 250, 0.8) !important;
+    }
     .stock-scroll .stock-card {
-        min-width: 260px;
-        max-width: 260px;
-        flex-shrink: 0;
-        scroll-snap-align: start;
+        min-width: 240px !important;
+        max-width: 240px !important;
+        flex: 0 0 240px !important;
+        scroll-snap-align: start !important;
+        margin-bottom: 0 !important;
+    }
+    div[data-testid="stMarkdownContainer"] {
+        overflow: visible !important;
     }
 
     /* Section header */
@@ -1193,8 +1412,9 @@ def inject_mobile_css():
         .kpi-card .kpi-value { font-size: 1.35rem; }
 
         .stock-scroll .stock-card {
-            min-width: 220px;
-            max-width: 220px;
+            min-width: 220px !important;
+            max-width: 220px !important;
+            flex: 0 0 220px !important;
         }
 
         .stTabs [data-baseweb="tab-list"] {
@@ -1257,7 +1477,11 @@ def inject_mobile_css():
         h1 { font-size: 1.1rem !important; }
         .kpi-card .kpi-value { font-size: 1.15rem; }
         .kpi-card .kpi-label { font-size: 0.55rem; }
-        .stock-scroll .stock-card { min-width: 190px; max-width: 190px; }
+        .stock-scroll .stock-card {
+            min-width: 190px !important;
+            max-width: 190px !important;
+            flex: 0 0 190px !important;
+        }
     }
 
     @media (min-width: 641px) and (max-width: 1024px) {
@@ -1308,7 +1532,7 @@ def render_stock_card_html(row):
     else:
         upside_cls = "up"
         upside_str = "—"
-    ai_score = int(row.get("AI_Score", 0))
+    ai_score = int(row.get("AI_Score", 0)) if pd.notna(row.get("AI_Score", 0)) else 0
     mos = row.get("Margin of Safety %", 0)
     mos_str = f"{mos:+.0f}%" if pd.notna(mos) else "—"
     entry_p = row.get("Entry Trigger Price", 0)
@@ -1360,6 +1584,7 @@ def render_stock_card_grid(df, max_items=20):
     </div>
     """, unsafe_allow_html=True)
 
+# ⭐ CHANGE 1: render_horizontal_scroll with fixed scroll
 def render_horizontal_scroll(df, title, max_items=10):
     if df.empty:
         return
@@ -1373,6 +1598,96 @@ def render_horizontal_scroll(df, title, max_items=10):
     <div class="stock-scroll">{cards_html}</div>
     """, unsafe_allow_html=True)
 
+# ============= ⭐ CHANGE 2: DCF CARD HELPERS =============
+def _render_dcf_card(row):
+    """DCF-specific card with entry/exit/IV values."""
+    signal_cls = _signal_class(row.get("AI Signal", "Hold"))
+    action_cls = _action_class(row.get("Valuation Action", ""))
+
+    def _fmt(v):
+        return f"₹{v:,.0f}" if pd.notna(v) and v > 0 else "—"
+
+    cmp_str = _fmt(row.get("CMP", 0))
+    entry_str = _fmt(row.get("Entry Trigger Price", 0))
+    exit_str = _fmt(row.get("Exit Trigger Price", 0))
+    iv_base_str = _fmt(row.get("Intrinsic Value (Base)", 0))
+    iv_dcf_str = _fmt(row.get("Intrinsic Value (DCF)", 0))
+    iv_mult_str = _fmt(row.get("Intrinsic Value (Multiples)", 0))
+
+    ai_score = int(row.get("AI_Score", 0)) if pd.notna(row.get("AI_Score", 0)) else 0
+    mos = row.get("Margin of Safety %", 0)
+    if pd.notna(mos):
+        mos_cls = "up" if mos > 0 else "down"
+        mos_str = f"{mos:+.1f}%"
+    else:
+        mos_cls = "up"
+        mos_str = "—"
+
+    ticker = row.get("Ticker", "?")
+    name = str(row.get("Name", ""))[:30]
+    action = row.get("Valuation Action", "⚪ HOLD")
+    signal = row.get("AI Signal", "—")
+
+    return f"""
+    <div class="stock-card {signal_cls}">
+        <div class="stock-header">
+            <div>
+                <div class="stock-ticker">{ticker}</div>
+                <div class="stock-name">{name}</div>
+            </div>
+            <div class="stock-score-badge">{ai_score}</div>
+        </div>
+        <div class="stock-price-row">
+            <div class="stock-price">{cmp_str}</div>
+            <div class="stock-change {mos_cls}">MoS {mos_str}</div>
+        </div>
+        <div class="stock-metrics">
+            <div>
+                <div class="stock-metric-label">Entry</div>
+                <div class="stock-metric-value">{entry_str}</div>
+            </div>
+            <div>
+                <div class="stock-metric-label">Exit</div>
+                <div class="stock-metric-value">{exit_str}</div>
+            </div>
+            <div>
+                <div class="stock-metric-label">Base IV</div>
+                <div class="stock-metric-value">{iv_base_str}</div>
+            </div>
+        </div>
+        <div class="stock-metrics">
+            <div>
+                <div class="stock-metric-label">DCF IV</div>
+                <div class="stock-metric-value">{iv_dcf_str}</div>
+            </div>
+            <div>
+                <div class="stock-metric-label">Mult IV</div>
+                <div class="stock-metric-value">{iv_mult_str}</div>
+            </div>
+            <div>
+                <div class="stock-metric-label">Signal</div>
+                <div class="stock-metric-value">{signal}</div>
+            </div>
+        </div>
+        <div class="stock-action {action_cls}">{action}</div>
+    </div>
+    """
+
+
+def _render_dcf_stock_cards(df, max_items=200):
+    """Render DCF cards in a 2-column grid."""
+    if df.empty:
+        st.info("Koi stock nahi mila.")
+        return
+    subset = df.head(max_items)
+    cards_html = "".join(_render_dcf_card(row) for _, row in subset.iterrows())
+    st.markdown(f"""
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+        {cards_html}
+    </div>
+    """, unsafe_allow_html=True)
+
+
 # ============= KPI ROW =============
 def render_kpi_row(scored):
     inject_mobile_css()
@@ -1380,7 +1695,6 @@ def render_kpi_row(scored):
     avg = scored["AI_Score"].mean()
     sb = int((scored["AI Signal"] == "Strong Buy").sum())
     bl = int(scored["AI Signal"].isin(["Strong Buy", "Buy"]).sum())
-    clean = int((scored.get("Quality Grade", pd.Series()) == "A — Clean").sum())
     entry = int(scored.get("Valuation Action", pd.Series()).astype(str)
                 .str.contains("DEEP BUY|ENTRY", na=False).sum())
     exit_ = int(scored.get("Valuation Action", pd.Series()).astype(str)
@@ -1424,10 +1738,10 @@ def render_kpi_row(scored):
                       .str.contains("DEEP BUY|ENTRY", na=False)].sort_values(
                       "Margin of Safety %", ascending=False)
     if not entry_df.empty:
-        render_horizontal_scroll(entry_df, "🎯 Top Entry Opportunities", 10)
-    top_ai = scored.sort_values("AI_Score", ascending=False).head(10)
+        render_horizontal_scroll(entry_df, "🎯 Top Entry Opportunities", 15)
+    top_ai = scored.sort_values("AI_Score", ascending=False).head(15)
     if not top_ai.empty:
-        render_horizontal_scroll(top_ai, "⭐ Top AI-Rated Stocks", 10)
+        render_horizontal_scroll(top_ai, "⭐ Top AI-Rated Stocks", 15)
 
 # ============= SCREENER TAB =============
 def render_screener_tab(scored, registry, project_dir):
@@ -1497,7 +1811,7 @@ def render_screener_tab(scored, registry, project_dir):
     except Exception as exc:
         d2.warning(f"Excel fail: {exc}")
 
-# ============= DCF TAB =============
+# ============= ⭐ CHANGE 2: DCF TAB WITH SIGNAL TABS =============
 def render_dcf_valuation_tab(scored):
     st.subheader("💰 DCF Valuation")
     st.caption("Hybrid IV: DCF (60%) + Peer-Multiples (40%)")
@@ -1530,27 +1844,26 @@ def render_dcf_valuation_tab(scored):
     """, unsafe_allow_html=True)
 
     st.divider()
-    st.markdown("### 🎯 Trigger Alerts")
-    trigger_col = "Valuation Action" if "Valuation Action" in val.columns else None
-    if trigger_col:
-        entry_hits = val[val[trigger_col].isin(
-            ["🟢🟢🟢 DEEP BUY", "🟢🟢 ENTRY TRIGGER"])].sort_values(
-            "Margin of Safety %", ascending=False)
-        exit_hits = val[val[trigger_col] == "🔴 EXIT TRIGGER"].sort_values(
-            "Margin of Safety %")
-        entry_tab, exit_tab = st.tabs([
-            f"🟢 Entry Zone ({len(entry_hits)})",
-            f"🔴 Exit Zone ({len(exit_hits)})"])
-        with entry_tab:
-            if entry_hits.empty:
-                st.info("Koi stock currently entry zone mein nahi hai.")
-            else:
-                render_stock_card_grid(entry_hits, 20)
-        with exit_tab:
-            if exit_hits.empty:
-                st.info("Koi stock currently exit zone mein nahi hai.")
-            else:
-                render_stock_card_grid(exit_hits, 20)
+    st.markdown("### 🎯 Trigger Alerts by Valuation Signal")
+
+    if "Valuation Signal" in val.columns:
+        sig_order = ["🟢 Deep Value", "🟢 Undervalued", "🟡 Slightly Under",
+                     "⚪ Fair Value", "🟠 Slightly Over", "🔴 Overvalued",
+                     "🔴 Highly Overvalued"]
+        existing_sigs = [s for s in sig_order
+                         if s in val["Valuation Signal"].dropna().unique()]
+        if existing_sigs:
+            tab_labels = [f"{s} ({int((val['Valuation Signal'] == s).sum())})"
+                          for s in existing_sigs]
+            sig_tabs = st.tabs(tab_labels)
+            for tab, sig in zip(sig_tabs, existing_sigs):
+                with tab:
+                    sub = val[val["Valuation Signal"] == sig].sort_values(
+                        "Margin of Safety %", ascending=False).reset_index(drop=True)
+                    if sub.empty:
+                        st.info("Koi stock nahi mila.")
+                    else:
+                        _render_dcf_stock_cards(sub, max_items=200)
         st.divider()
 
     with st.expander("🔎 Filters", expanded=False):
@@ -1747,7 +2060,7 @@ def render_quality_tab(scored):
         <div class="kpi-card kpi-green"><div class="kpi-label">Fetch OK</div>
             <div class="kpi-value">{fok}/{tot}</div></div>
         <div class="kpi-card kpi-amber"><div class="kpi-label">Sector Data</div>
-            <div class="kpi-value">{scored[sc].notna().sum()}/{tot if sc else 0}</div></div>
+            <div class="kpi-value">{scored[sc].notna().sum() if sc else 0}/{tot}</div></div>
         <div class="kpi-card kpi-green"><div class="kpi-label">Valuation OK</div>
             <div class="kpi-value">{val_ok}/{tot}</div></div>
     </div>
@@ -1762,28 +2075,47 @@ def render_trade_tab(scored):
     total = cand["Position Size %"].sum()
     st.info(f"💡 Total: **{total:.1f}%** across {len(cand)} ideas.")
 
+# ⭐ CHANGE 3: Deep Dive with Technical tab
 def render_deep_tab(scored):
     st.subheader("🔬 Deep Dive")
-    if scored.empty: return
+    if scored.empty:
+        return
     t = st.selectbox("Ticker", scored["Ticker"].tolist())
-    if not t: return
+    if not t:
+        return
     row = scored.loc[scored["Ticker"] == t].iloc[0]
+
     st.markdown(render_stock_card_html(row), unsafe_allow_html=True)
-    tabs = st.tabs(["📈 Chart", "💰 Valuation", "🧮 Fundamentals"])
-    with tabs[0]: render_price_chart(t)
+
+    tabs = st.tabs(["📈 Chart", "💰 Valuation", "📊 Technical", "🧮 Fundamentals"])
+
+    with tabs[0]:
+        render_price_chart(t)
+
     with tabs[1]:
         vd = {k: row.get(k) for k in
               ["Intrinsic Value (DCF)", "Intrinsic Value (Multiples)",
                "Intrinsic Value (Base)", "Lower Intrinsic Value",
                "Upper Intrinsic Value", "WACC Used", "Margin of Safety %",
-               "Valuation Signal", "DCF_Valuation_Score"] if k in row}
-        st.json({k: (None if pd.isna(v) else v) for k, v in vd.items()})
+               "Valuation Signal", "DCF_Valuation_Score",
+               "Valuation Action", "Entry Trigger Price", "Exit Trigger Price",
+               "To Entry %", "To Exit %"] if k in row}
+        st.json({k: (None if pd.isna(v) else (float(v) if isinstance(v, (int, float, np.number)) else v))
+                 for k, v in vd.items()})
+
     with tabs[2]:
+        render_technical_analysis(row)
+
+    with tabs[3]:
         fd = {k: row.get(k) for k in
               ["PE Ratio", "PB Ratio", "EV/EBITDA Ratio", "Return on Equity", "ROCE",
-               "Net Profit Margin", "Debt to Equity", "Promoter Holding", "Dividend Yield"]
+               "Net Profit Margin", "EBITDA Margin", "5Y Historical EPS Growth",
+               "5Y Historical Revenue Growth", "Debt to Equity", "Current Ratio",
+               "Promoter Holding", "Dividend Yield", "Free Cash Flow",
+               "Operating Cash Flow", "Total Debt", "Cash and Equivalent", "Market Cap"]
               if k in row}
-        st.json({k: (None if pd.isna(v) else v) for k, v in fd.items()})
+        st.json({k: (None if pd.isna(v) else (float(v) if isinstance(v, (int, float, np.number)) else v))
+                 for k, v in fd.items()})
 
 # ============= EXCEL EXPORT =============
 def _build_excel(scored, ss, rot, idf):
